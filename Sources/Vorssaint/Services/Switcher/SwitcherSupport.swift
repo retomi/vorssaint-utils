@@ -1676,6 +1676,14 @@ enum SwitcherSupport {
         return victims
     }
 
+    /// `enabled` is the Settings choice: off, only Shift+Tab or ← step back.
+    static func shouldNavigateBackwardOnShiftPress(enabled: Bool = true,
+                                                   shiftIsNavigationModifier: Bool,
+                                                   wasShiftHeld: Bool,
+                                                   isShiftHeld: Bool) -> Bool {
+        enabled && shiftIsNavigationModifier && isShiftHeld && !wasShiftHeld
+    }
+
     /// Keeps the overflow icon row from scrolling past either end.
     static func clampedIconRowFirstVisibleIndex(itemCount: Int,
                                                 visibleCount: Int,
@@ -1735,6 +1743,11 @@ enum SwitcherSupport {
         if delta < 0 { return first }
         return min(itemCount - 1, first + min(visible, itemCount) - 1)
     }
+
+    /// A Tab this close behind a Shift-press step is the same physical chord
+    /// and must not step again; later Tabs during the Shift hold keep walking
+    /// the list (issue #784).
+    static let shiftBackChordWindow: TimeInterval = 0.35
 
     static func selectedPreviewPlacement(appCount rawAppCount: Int,
                                          selectedAppIndex rawSelectedAppIndex: Int,

@@ -168,6 +168,13 @@ final class AppSwitcher: ObservableObject {
     private var sessionSourceContext: SwitcherSourceContext?
     private(set) var sessionShortcut: GlobalShortcut?
     @Published private(set) var sessionScope: SwitcherSessionScope = .allApps
+    private var shiftBackNavigationHeld = false
+    /// Pressing Shift mid-session already steps back once, so the Tab landing
+    /// in that same physical chord must not step again — but later Tabs during
+    /// the same Shift hold must keep walking the list (issue #784). The chord
+    /// is recognized by time: anything after this deadline is a deliberate
+    /// separate press.
+    private var shiftBackChordDeadline: TimeInterval = 0
 
     /// Windows already asked to close, still listed until they are really
     /// gone. Releasing the shortcut skips them, so they are never raised on
@@ -952,6 +959,8 @@ final class AppSwitcher: ObservableObject {
                 if let shortcut = sessionShortcut,
                    !shortcut.requiredModifiersHeld(in: event.flags) {
                     commitSession()
+                } else if handleShiftBackNavigation(flags: event.flags) {
+                    return nil
                 }
             }
             return Unmanaged.passUnretained(event)
@@ -1007,6 +1016,9 @@ final class AppSwitcher: ObservableObject {
         let shortcut = sessionShortcut ?? appsShortcut
         switch keyCode {
         case _ where keyCode == shortcut.keyCode && shortcut.matches(event: event, allowingExtraShift: true):
+            if shortcut.shiftIsNavigationModifier, flags.contains(.maskShift), consumesShiftBackChordTab() {
+                break
+            }
             let delta = shortcut.shiftIsNavigationModifier && flags.contains(.maskShift) ? -1 : 1
             // Holding the key stops at the list's end instead of wrapping, like
             // the system switcher; a fresh press wraps around (issue #187).
@@ -1019,6 +1031,9 @@ final class AppSwitcher: ObservableObject {
                                     tolerating: shortcut.modifiers):
             // A window-scoped session keeps its list when the Apps shortcut is
             // pressed with overlapping modifiers instead of changing scope.
+            if appsShortcut.shiftIsNavigationModifier, flags.contains(.maskShift), consumesShiftBackChordTab() {
+                break
+            }
             let delta = appsShortcut.shiftIsNavigationModifier && flags.contains(.maskShift) ? -1 : 1
             let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
             advanceSelection(by: delta, wrapping: !isRepeat)
@@ -1232,6 +1247,7 @@ final class AppSwitcher: ObservableObject {
                                               frontmostPID: SwitcherSupport.appPID(forFrontmost: reportedFrontPID,
                                                                                    items: list))
         sessionShortcut = pending.shortcut
+        shiftBackNavigationHeld = pending.reversed && pending.shortcut.shiftIsNavigationModifier
         if pending.additionalNavigation != 0 {
             let delta = pending.additionalNavigation < 0 ? -1 : 1
             for _ in 0..<abs(pending.additionalNavigation) {
@@ -1269,6 +1285,29 @@ final class AppSwitcher: ObservableObject {
             secureInputReplays.invalidate()
         }
         releaseSecureInputActionsIfIdle()
+    }
+
+    private func handleShiftBackNavigation(flags: CGEventFlags) -> Bool {
+        let shiftHeld = flags.contains(.maskShift)
+        defer { shiftBackNavigationHeld = shiftHeld }
+        guard let shortcut = sessionShortcut,
+              SwitcherSupport.shouldNavigateBackwardOnShiftPress(enabled: UserDefaults.standard.bool(forKey: DefaultsKey.switcherShiftStepsBack),
+                                                                  shiftIsNavigationModifier: shortcut.shiftIsNavigationModifier,
+                                                                  wasShiftHeld: shiftBackNavigationHeld,
+                                                                  isShiftHeld: shiftHeld)
+        else { return false }
+        advanceSelection(by: -1)
+        shiftBackChordDeadline = ProcessInfo.processInfo.systemUptime
+            + SwitcherSupport.shiftBackChordWindow
+        return true
+    }
+
+    /// True exactly once for the Tab that belongs to the Shift press that just
+    /// stepped back; consuming it keeps a Shift+Tab chord at one step.
+    private func consumesShiftBackChordTab() -> Bool {
+        guard ProcessInfo.processInfo.systemUptime < shiftBackChordDeadline else { return false }
+        shiftBackChordDeadline = 0
+        return true
     }
 
     private func initialSelectionIndex(in items: [SwitcherItem],
@@ -1811,6 +1850,8 @@ final class AppSwitcher: ObservableObject {
         sessionSourceContext = nil
         sessionShortcut = nil
         sessionScope = .allApps
+        shiftBackNavigationHeld = false
+        shiftBackChordDeadline = 0
         closingItemIDs = []
         quittingPIDs = []
         commitPendingForClose = false
