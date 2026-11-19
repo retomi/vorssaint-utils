@@ -4420,22 +4420,6 @@ enum SwitcherModelFeatureTests {
         suite.expect(customSwitcherHints.apps == "⌥Tab"
                 && customSwitcherHints.windows == commandKeyHint("⌘", Int64(kVK_ANSI_J), "J"),
                "App Switcher icon-row hints show custom app and window shortcuts independently")
-        suite.expect(SwitcherSupport.shouldNavigateBackwardOnShiftPress(shiftIsNavigationModifier: true,
-                                                                  wasShiftHeld: false,
-                                                                  isShiftHeld: true),
-               "App Switcher shift-only back navigation fires when Shift is pressed")
-        suite.expect(!SwitcherSupport.shouldNavigateBackwardOnShiftPress(shiftIsNavigationModifier: true,
-                                                                   wasShiftHeld: true,
-                                                                   isShiftHeld: true),
-               "App Switcher shift-only back navigation does not repeat while Shift is held")
-        suite.expect(!SwitcherSupport.shouldNavigateBackwardOnShiftPress(shiftIsNavigationModifier: true,
-                                                                   wasShiftHeld: true,
-                                                                   isShiftHeld: false),
-               "App Switcher shift-only back navigation does not fire on Shift release")
-        suite.expect(!SwitcherSupport.shouldNavigateBackwardOnShiftPress(shiftIsNavigationModifier: false,
-                                                                   wasShiftHeld: false,
-                                                                   isShiftHeld: true),
-               "App Switcher shift-only back navigation stays off when Shift belongs to the shortcut")
 
         func syntheticCapture(_ draw: (CGContext, CGSize) -> Void) -> CGImage? {
             let size = CGSize(width: 320, height: 200)

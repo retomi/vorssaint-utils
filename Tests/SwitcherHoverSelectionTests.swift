@@ -157,8 +157,6 @@ enum SwitcherHoverSelectionTests {
         var simpleModeEnabled = false
         var grid = Grid()
         var iconRowLayout = Row()
-        var shiftBackNavigationHeld = false
-        var shiftBackChordDeadline: TimeInterval = 0
         func updateIconRowLayoutForCurrentSelection() {}
         func recomputeLayouts(for items: [SwitcherItem]) {}
         func resizePanel(animated: Bool = true) {}

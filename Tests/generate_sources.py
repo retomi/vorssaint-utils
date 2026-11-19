@@ -2022,7 +2022,6 @@ def main():
                                    "    func select(index:", "    func hoverSelect(index:",
                                    "    func hoverSelectEnded(", "    func hoverSelectIconRow(index:",
                                    "    func hoverSelectIconRowEnded(", "    private var selectedItemID:",
-                                   "    private func handleShiftBackNavigation(", "    private func consumesShiftBackChordTab(",
                                    "    private func advanceSelection(", "    private func advanceAppSelection(",
                                    "    private func advanceWindowInSelectedApp(", "    private func moveSelection(",
                                    "    private func moveIconRowSelection(", "    private func printableSearchText(",
