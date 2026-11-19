@@ -239,6 +239,8 @@ extension Strings {
         switcherIgnoreHoverSelectionCaption: "Bewegt sich der Zeiger über Apps und Fenster, bleibt die Markierung an ihrem Platz. Ein Klick öffnet weiterhin einen Eintrag.",
         switcherShiftStepsBack: "Mit Umschalt allein zurück",
         switcherShiftStepsBackCaption: "Drücken von Umschalt bei geöffnetem Umschalter wählt den vorherigen Eintrag. Umschalt+Tab und ← gehen immer zurück.",
+        switcherTabStepsThroughWindows: "Tab wechselt auch zwischen Fenstern",
+        switcherTabStepsThroughWindowsCaption: "Bei großen Symbolen geht Tab durch jedes Fenster einer App, bevor es zur nächsten App wechselt.",
         switcherMergeTabs: "Einen Eintrag pro App anzeigen",
         switcherMergeTabsCaption: "Fasst alle Fenster einer App zu einem Eintrag im Umschalter zusammen, statt einen Eintrag pro Fenster.",
         switcherWindowlessApps: "Apps ohne geöffnetes Fenster",

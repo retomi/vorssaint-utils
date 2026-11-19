@@ -239,6 +239,8 @@ extension Strings {
         switcherIgnoreHoverSelectionCaption: "İmleç uygulamaların ve pencerelerin üzerinden geçerken vurgu yerinde kalır. Tıklamak yine açar.",
         switcherShiftStepsBack: "Yalnızca Shift ile geri git",
         switcherShiftStepsBackCaption: "Değiştirici açıkken Shift’e basmak önceki öğeyi seçer. Shift+Tab ve ← her zaman geri gider.",
+        switcherTabStepsThroughWindows: "Tab pencereler arasında da geçer",
+        switcherTabStepsThroughWindowsCaption: "Büyük simgelerde Tab, sonraki uygulamaya geçmeden önce uygulamanın her penceresini dolaşır.",
         switcherMergeTabs: "Uygulama başına bir giriş göster",
         switcherMergeTabsCaption: "Değiştiricide pencere başına bir giriş yerine, bir uygulamanın tüm pencerelerini tek girişte toplar.",
         switcherWindowlessApps: "Açık penceresi olmayan uygulamalar",

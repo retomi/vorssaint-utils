@@ -1482,6 +1482,14 @@ final class AppSwitcher: ObservableObject {
             iconRowLayout: usesIconRowLayout,
             windowRow: usesWindowRow
         ), sessionScope == .allApps {
+            if UserDefaults.standard.bool(forKey: DefaultsKey.switcherTabStepsThroughWindows) {
+                userNavigated = true
+                selectedIndex = SwitcherSupport.nextGroupedWindowSelectionIndex(items: windows,
+                                                                                selectedIndex: selectedIndex,
+                                                                                delta: delta,
+                                                                                wrapping: wrapping)
+                return
+            }
             advanceAppSelection(by: delta, wrapping: wrapping)
             return
         }

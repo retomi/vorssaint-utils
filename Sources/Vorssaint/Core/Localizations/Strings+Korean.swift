@@ -240,6 +240,8 @@ extension Strings {
         switcherIgnoreHoverSelectionCaption: "앱과 윈도우 위로 포인터를 옮겨도 강조 표시는 그대로입니다. 클릭하면 여전히 엽니다.",
         switcherShiftStepsBack: "Shift만으로 뒤로 이동",
         switcherShiftStepsBackCaption: "전환기가 열려 있을 때 Shift를 누르면 이전 항목을 선택합니다. Shift+Tab과 ←로는 항상 뒤로 이동합니다.",
+        switcherTabStepsThroughWindows: "Tab으로 윈도우도 전환",
+        switcherTabStepsThroughWindowsCaption: "큰 아이콘에서 Tab은 앱의 각 윈도우를 거친 다음 다음 앱으로 이동합니다.",
         switcherMergeTabs: "앱별로 하나로 묶어 표시",
         switcherMergeTabsCaption: "전환기에서 앱의 모든 윈도우를 각각이 아닌 하나의 항목으로 묶습니다.",
         switcherWindowlessApps: "열린 윈도우가 없는 앱",

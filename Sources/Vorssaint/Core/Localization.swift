@@ -405,6 +405,8 @@ struct Strings {
     let switcherIgnoreHoverSelectionCaption: String
     let switcherShiftStepsBack: String
     let switcherShiftStepsBackCaption: String
+    let switcherTabStepsThroughWindows: String
+    let switcherTabStepsThroughWindowsCaption: String
     let switcherMergeTabs: String
     let switcherMergeTabsCaption: String
     let switcherWindowlessApps: String
@@ -1577,6 +1579,8 @@ extension Strings {
         switcherIgnoreHoverSelectionCaption: "Mover o ponteiro sobre apps e janelas deixa o destaque onde está. Clicar ainda abre um.",
         switcherShiftStepsBack: "Voltar só com Shift",
         switcherShiftStepsBackCaption: "Pressionar Shift com o seletor aberto seleciona o item anterior. Shift+Tab e ← sempre voltam.",
+        switcherTabStepsThroughWindows: "Tab percorre também as janelas",
+        switcherTabStepsThroughWindowsCaption: "Nos ícones grandes, Tab passa por cada janela do app antes de ir para o próximo app.",
         switcherMergeTabs: "Mostrar uma entrada por app",
         switcherMergeTabsCaption: "Junta todas as janelas de um app em uma só entrada no alternador, em vez de uma por janela.",
         switcherWindowlessApps: "Apps sem janela aberta",
@@ -2710,6 +2714,8 @@ extension Strings {
         switcherIgnoreHoverSelectionCaption: "Moving the pointer over apps and windows leaves the highlight where it is. Clicking still opens one.",
         switcherShiftStepsBack: "Step back with Shift alone",
         switcherShiftStepsBackCaption: "Pressing Shift while the switcher is open selects the previous item. Shift+Tab and ← always go back.",
+        switcherTabStepsThroughWindows: "Tab steps through windows too",
+        switcherTabStepsThroughWindowsCaption: "With large icons, Tab visits each of an app’s windows before moving to the next app.",
         switcherMergeTabs: "Show one entry per app",
         switcherMergeTabsCaption: "Collapses all of an app’s windows into one entry in the switcher, instead of one entry per window.",
         switcherWindowlessApps: "Apps with no open window",

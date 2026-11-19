@@ -240,6 +240,8 @@ extension Strings {
         switcherIgnoreHoverSelectionCaption: "指標經過 App 和視窗時，重點標示保持原位。按一下仍會開啟。",
         switcherShiftStepsBack: "只按 Shift 返回",
         switcherShiftStepsBackCaption: "切換器開啟時按 Shift 會選取上一項。Shift+Tab 和 ← 一律可以返回。",
+        switcherTabStepsThroughWindows: "Tab 也切換視窗",
+        switcherTabStepsThroughWindowsCaption: "大圖示模式下，Tab 會先逐一經過 App 的每個視窗，再切換到下一個 App。",
         switcherMergeTabs: "每個 App 僅顯示一項",
         switcherMergeTabsCaption: "將 App 的所有視窗合併為切換器中的一項，而不是每個視窗一項。",
         switcherWindowlessApps: "沒有開啟視窗的 App",

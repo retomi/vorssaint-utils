@@ -239,6 +239,8 @@ extension Strings {
         switcherIgnoreHoverSelectionCaption: "アプリやウインドウの上にポインタを動かしても、ハイライトは動きません。クリックすると開きます。",
         switcherShiftStepsBack: "Shiftだけで戻る",
         switcherShiftStepsBackCaption: "スイッチャーを開いているときにShiftを押すと、前の項目を選択します。Shift+Tabと←では常に戻れます。",
+        switcherTabStepsThroughWindows: "Tabでウインドウも切り替える",
+        switcherTabStepsThroughWindowsCaption: "大きいアイコンでは、Tabでアプリの各ウインドウを順に選んでから次のアプリに移ります。",
         switcherMergeTabs: "アプリごとに1つにまとめて表示",
         switcherMergeTabsCaption: "スイッチャーで、アプリのすべてのウインドウをウインドウごとではなく1つの項目にまとめます。",
         switcherWindowlessApps: "ウインドウなしのアプリ",

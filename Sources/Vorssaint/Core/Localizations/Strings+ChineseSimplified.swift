@@ -239,6 +239,8 @@ extension Strings {
         switcherIgnoreHoverSelectionCaption: "指针经过 App 和窗口时，高亮保持不动。单击仍会打开。",
         switcherShiftStepsBack: "仅按 Shift 返回",
         switcherShiftStepsBackCaption: "切换器打开时按 Shift 会选择上一项。Shift+Tab 和 ← 始终可以返回。",
+        switcherTabStepsThroughWindows: "Tab 也切换窗口",
+        switcherTabStepsThroughWindowsCaption: "大图标模式下，Tab 会先逐个经过应用的每个窗口，再切换到下一个应用。",
         switcherMergeTabs: "每个 App 仅显示一项",
         switcherMergeTabsCaption: "将一个 App 的所有窗口合并为切换器中的一项，而不是每个窗口一项。",
         switcherWindowlessApps: "无打开窗口的 App",

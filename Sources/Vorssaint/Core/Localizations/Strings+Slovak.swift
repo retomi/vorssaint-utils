@@ -239,6 +239,8 @@ extension Strings {
         switcherIgnoreHoverSelectionCaption: "Posun ukazovateľa po aplikáciách a oknách nechá zvýraznenie na mieste. Kliknutie stále otvorí položku.",
         switcherShiftStepsBack: "Späť samotným Shiftom",
         switcherShiftStepsBackCaption: "Stlačenie Shiftu pri otvorenom prepínači vyberie predchádzajúcu položku. Shift+Tab a ← vždy idú späť.",
+        switcherTabStepsThroughWindows: "Tab prechádza aj oknami",
+        switcherTabStepsThroughWindowsCaption: "Pri veľkých ikonách prejde Tab každým oknom aplikácie pred prechodom na ďalšiu.",
         switcherMergeTabs: "Zobraziť jednu položku na aplikáciu",
         switcherMergeTabsCaption: "Zlúči všetky okná aplikácie do jednej položky v prepínači namiesto jednej položky na každé okno.",
         switcherWindowlessApps: "Aplikácie bez otvoreného okna",

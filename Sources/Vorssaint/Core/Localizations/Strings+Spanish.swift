@@ -239,6 +239,8 @@ extension Strings {
         switcherIgnoreHoverSelectionCaption: "Mover el puntero sobre apps y ventanas deja el resaltado donde está. Un clic sigue abriendo uno.",
         switcherShiftStepsBack: "Retroceder solo con Mayúsculas",
         switcherShiftStepsBackCaption: "Pulsar Mayúsculas con el selector abierto selecciona el elemento anterior. Mayúsculas+Tab y ← siempre retroceden.",
+        switcherTabStepsThroughWindows: "Tab recorre también las ventanas",
+        switcherTabStepsThroughWindowsCaption: "Con iconos grandes, Tab pasa por cada ventana de la app antes de ir a la siguiente.",
         switcherMergeTabs: "Mostrar una entrada por app",
         switcherMergeTabsCaption: "Agrupa todas las ventanas de una app en una sola entrada del selector, en vez de una por ventana.",
         switcherWindowlessApps: "Apps sin ventanas abiertas",
