@@ -145,9 +145,6 @@ struct WindowLayoutSettings: View {
                 Section(text.gapsSection) {
                     gapPicker(text.windowGap, selection: $windowGap)
                     gapPicker(text.screenGap, selection: $screenGap)
-                    Button(text.gapsApplyAll) {
-                        WindowLayoutService.shared.reapplyToSnappedWindows()
-                    }
                     Toggle(text.keepInsideGap, isOn: $keepInsideGap)
                         .onChange(of: keepInsideGap) { _, _ in
                             WindowLayoutService.shared.syncWithPreferences()

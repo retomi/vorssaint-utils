@@ -37,14 +37,6 @@ final class WindowLayoutService: ObservableObject {
 
     private var frameHistory = WindowLayoutHistory()
     private var lastActions: [WindowLayoutWindowKey: WindowLayoutAction] = [:]
-    // The frame and action of each window's last placement. A window still
-    // there was not moved by hand since, so new gaps may move it again. Kept
-    // in defaults so a restart of Vorssaint alone does not forget it; window
-    // keys carry the app's launch time, so a relaunched app never matches.
-    private var placedWindows: [WindowLayoutWindowKey: WindowLayoutPlacedWindow]
-        = WindowLayoutPlacedWindow.load() {
-        didSet { WindowLayoutPlacedWindow.save(placedWindows) }
-    }
     private var lastPlacementUptime: TimeInterval = 0
     private var keepInsideMonitor: Any?
     private var keepInsidePress: WindowServerWindowCandidate?
@@ -392,7 +384,6 @@ final class WindowLayoutService: ObservableObject {
                                   visibleFrame: visibleFrame)
         if placement.frame == target.frame {
             lastActions[target.key] = effectiveAction
-            placedWindows[target.key] = WindowLayoutPlacedWindow(frame: target.frame, action: effectiveAction)
             if cyclePress != nil || UserDefaults.standard.bool(forKey: DefaultsKey.windowEdgeSnapRestoreOnDrag) {
                 settledFrames[target.key] = WindowLayoutSettledFrame(requested: target.frame,
                                                                      actual: target.frame,
@@ -418,50 +409,12 @@ final class WindowLayoutService: ObservableObject {
                     cyclePress: cyclePress) {
             if startsRun { restoreFrames[target.key] = historyFrame ?? target.frame }
             lastActions[target.key] = effectiveAction
-            placedWindows[target.key] = WindowLayoutPlacedWindow(frame: placement.frame, action: effectiveAction)
             lastPlacementUptime = ProcessInfo.processInfo.systemUptime
             return finish(.success(restored: false))
         }
         frameHistory.discardLatest(for: target.key)
         restoreFrames[target.key] = previousRestoreFrame
         return finish(.failure(.failed))
-    }
-
-    /// Places every window again that still sits where its last placement
-    /// left it, so new gaps reach windows snapped before the change. Windows
-    /// moved or resized by hand since, or placed in an earlier app session,
-    /// are left alone.
-    @discardableResult
-    func reapplyToSnappedWindows() -> Int {
-        guard AXIsProcessTrusted(), let onScreen = onScreenWindowIDs() else { return 0 }
-        var count = 0
-        for (pid, keys) in Dictionary(grouping: placedWindows.keys, by: \.processID) {
-            guard let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else { continue }
-            let axApp = AXUIElementCreateApplication(pid)
-            AXUIElementSetMessagingTimeout(axApp, 0.35)
-            for window in windowsAttribute(axApp) ?? [] {
-                guard let target = target(from: window, app: app, onScreenWindowIDs: onScreen, capability: .frame),
-                      keys.contains(target.key),
-                      let placed = placedWindows[target.key],
-                      WindowLayoutGeometry.reappliesWithGaps(placed.action),
-                      target.frame.isClose(to: placed.frame, tolerance: frameTolerance),
-                      let screen = bestScreen(for: target.frame)
-                else { continue }
-                let visibleFrame = screen.windowLayoutVisibleFrame
-                let action = placed.action
-                let placement = placement(for: action, current: target.frame, visibleFrame: visibleFrame)
-                guard placement.frame != target.frame else { continue }
-                frameHistory.record(target.frame, for: target.key)
-                if setFrame(placement.frame, targetRect: placement.rect, screenVisibleFrame: visibleFrame,
-                            action: action, on: target.window, windowKey: target.key) {
-                    placedWindows[target.key] = WindowLayoutPlacedWindow(frame: placement.frame, action: action)
-                    count += 1
-                } else {
-                    frameHistory.discardLatest(for: target.key)
-                }
-            }
-        }
-        return count
     }
 
     // MARK: - Keep windows inside the screen gap
@@ -637,7 +590,6 @@ final class WindowLayoutService: ObservableObject {
         lastActions = lastActions.filter { activeWindows.contains($0.key) }
         settledFrames = settledFrames.filter { activeWindows.contains($0.key) }
         restoreFrames = restoreFrames.filter { activeWindows.contains($0.key) }
-        placedWindows = placedWindows.filter { activeWindows.contains($0.key) }
     }
 
     private func activeWindowKeys() -> Set<WindowLayoutWindowKey>? {

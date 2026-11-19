@@ -374,15 +374,6 @@ enum WindowLayoutGeometry {
         return result
     }
 
-    /// Placements whose frame follows the gap settings. Full screen, Restore
-    /// and display moves keep a size the gaps never set.
-    static func reappliesWithGaps(_ action: WindowLayoutAction) -> Bool {
-        switch action {
-        case .fullScreen, .restore, .previousDisplay, .nextDisplay: return false
-        default: return true
-        }
-    }
-
     enum DisplayDirection {
         case left, right, up, down
     }
@@ -1061,7 +1052,7 @@ enum WindowLayoutGeometry {
 
 }
 
-struct WindowLayoutFrame: Equatable, Codable {
+struct WindowLayoutFrame: Equatable {
     var origin: CGPoint
     var size: CGSize
 
@@ -1083,7 +1074,7 @@ struct WindowLayoutSettledFrame: Equatable {
     var pressedAction: WindowLayoutAction? = nil
 }
 
-struct WindowLayoutWindowKey: Hashable, Codable {
+struct WindowLayoutWindowKey: Hashable {
     let processID: pid_t
     let processLaunchTime: TimeInterval
     let windowID: CGWindowID
@@ -1135,31 +1126,5 @@ struct WindowLayoutHistory {
 
     mutating func removeStaleWindows(keeping activeWindows: Set<WindowLayoutWindowKey>) {
         framesByWindow = framesByWindow.filter { activeWindows.contains($0.key) }
-    }
-}
-
-extension WindowLayoutAction: Codable {}
-
-/// A window's last placement, remembered across restarts of Vorssaint.
-struct WindowLayoutPlacedWindow: Codable, Equatable {
-    let frame: WindowLayoutFrame
-    let action: WindowLayoutAction
-
-    private struct Entry: Codable {
-        let key: WindowLayoutWindowKey
-        let placed: WindowLayoutPlacedWindow
-    }
-
-    static func load(from defaults: UserDefaults = .standard) -> [WindowLayoutWindowKey: WindowLayoutPlacedWindow] {
-        guard let data = defaults.data(forKey: DefaultsKey.windowLayoutPlacedWindows),
-              let entries = try? JSONDecoder().decode([Entry].self, from: data)
-        else { return [:] }
-        return Dictionary(entries.map { ($0.key, $0.placed) }, uniquingKeysWith: { _, last in last })
-    }
-
-    static func save(_ windows: [WindowLayoutWindowKey: WindowLayoutPlacedWindow],
-                     to defaults: UserDefaults = .standard) {
-        let entries = windows.map { Entry(key: $0.key, placed: $0.value) }
-        defaults.set(try? JSONEncoder().encode(entries), forKey: DefaultsKey.windowLayoutPlacedWindows)
     }
 }
