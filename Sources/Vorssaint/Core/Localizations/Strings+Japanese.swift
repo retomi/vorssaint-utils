@@ -245,6 +245,7 @@ extension Strings {
         switcherPeekSelectedAppCaption: "選択したアプリのウインドウを元の位置に、すでに最前面にあるかのように表示します。ほかのウインドウの順序は変わりません。",
         switcherPeekHighlightSelected: "選択したウインドウを強調表示",
         switcherPeekHighlightSelectedCaption: "最前面に表示されるウインドウをアクセントカラーで囲みます。",
+        switcherDimMinimized: "しまったウインドウを淡色表示",
         switcherMergeTabs: "アプリごとに1つにまとめて表示",
         switcherMergeTabsCaption: "スイッチャーで、アプリのすべてのウインドウをウインドウごとではなく1つの項目にまとめます。",
         switcherWindowlessApps: "ウインドウなしのアプリ",

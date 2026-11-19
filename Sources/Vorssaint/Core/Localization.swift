@@ -411,6 +411,7 @@ struct Strings {
     let switcherPeekSelectedAppCaption: String
     let switcherPeekHighlightSelected: String
     let switcherPeekHighlightSelectedCaption: String
+    let switcherDimMinimized: String
     let switcherMergeTabs: String
     let switcherMergeTabsCaption: String
     let switcherWindowlessApps: String
@@ -1589,6 +1590,7 @@ extension Strings {
         switcherPeekSelectedAppCaption: "Exibe as janelas do app selecionado no lugar delas, como se ele já estivesse na frente, sem mudar a ordem das outras.",
         switcherPeekHighlightSelected: "Destacar a janela selecionada",
         switcherPeekHighlightSelectedCaption: "Contorna com a cor de destaque a janela que será trazida para a frente.",
+        switcherDimMinimized: "Esmaecer janelas minimizadas",
         switcherMergeTabs: "Mostrar uma entrada por app",
         switcherMergeTabsCaption: "Junta todas as janelas de um app em uma só entrada no alternador, em vez de uma por janela.",
         switcherWindowlessApps: "Apps sem janela aberta",
@@ -2728,6 +2730,7 @@ extension Strings {
         switcherPeekSelectedAppCaption: "Draws the selected app’s windows in place, as if it were already in front, without changing the order of the others.",
         switcherPeekHighlightSelected: "Highlight the selected window",
         switcherPeekHighlightSelectedCaption: "Outlines the window that will come to the front in the accent color.",
+        switcherDimMinimized: "Dim minimized windows",
         switcherMergeTabs: "Show one entry per app",
         switcherMergeTabsCaption: "Collapses all of an app’s windows into one entry in the switcher, instead of one entry per window.",
         switcherWindowlessApps: "Apps with no open window",

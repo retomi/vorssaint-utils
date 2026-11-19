@@ -19,6 +19,7 @@ struct SwitcherSettings: View {
     @AppStorage(DefaultsKey.switcherSimpleMode) private var switcherSimpleMode = false
     @AppStorage(DefaultsKey.switcherMergeTabs) private var switcherMergeTabs = false
     @AppStorage(DefaultsKey.switcherWindowlessApps) private var switcherWindowlessApps = SwitcherWindowlessApps.fallback.rawValue
+    @AppStorage(DefaultsKey.switcherDimMinimized) private var switcherDimMinimized = false
     @AppStorage(DefaultsKey.switcherMinimizedPlacement) private var switcherMinimizedPlacement = WindowSwitchMinimizedPlacement.normal.rawValue
     @AppStorage(DefaultsKey.switcherTreatHiddenAppsLikeMinimized) private var switcherTreatHiddenAppsLikeMinimized = true
     @AppStorage(DefaultsKey.switcherShowFullscreenWindows) private var switcherShowFullscreenWindows = true
@@ -297,6 +298,12 @@ struct SwitcherSettings: View {
                 .onChange(of: switcherMinimizedPlacement) { _, _ in
                     AppSwitcher.shared.syncWithPreferences()
                 }
+            if switcherMinimizedPlacement != WindowSwitchMinimizedPlacement.hidden.rawValue {
+                SettingsRow(symbol: "circle.lefthalf.filled", title: l10n.s.switcherDimMinimized) {
+                    Toggle(l10n.s.switcherDimMinimized, isOn: $switcherDimMinimized)
+                        .labelsHidden()
+                }
+            }
             if switcherMinimizedPlacement != WindowSwitchMinimizedPlacement.normal.rawValue {
                 SettingsRow(symbol: "eye.slash", title: l10n.s.switcherTreatHiddenAppsLikeMinimized) {
                     Toggle(l10n.s.switcherTreatHiddenAppsLikeMinimized,

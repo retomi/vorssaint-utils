@@ -245,6 +245,7 @@ extension Strings {
         switcherPeekSelectedAppCaption: "在原位置显示所选应用的窗口，就像它已在最前面一样，不改变其他窗口的顺序。",
         switcherPeekHighlightSelected: "高亮所选窗口",
         switcherPeekHighlightSelectedCaption: "用强调色勾勒将被置于最前的窗口。",
+        switcherDimMinimized: "淡化最小化的窗口",
         switcherMergeTabs: "每个 App 仅显示一项",
         switcherMergeTabsCaption: "将一个 App 的所有窗口合并为切换器中的一项，而不是每个窗口一项。",
         switcherWindowlessApps: "无打开窗口的 App",

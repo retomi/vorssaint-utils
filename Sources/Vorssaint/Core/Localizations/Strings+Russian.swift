@@ -246,6 +246,7 @@ extension Strings {
         switcherPeekSelectedAppCaption: "Показывает окна выбранного приложения на их месте, как будто оно уже впереди, не меняя порядок остальных.",
         switcherPeekHighlightSelected: "Выделять выбранное окно",
         switcherPeekHighlightSelectedCaption: "Обводит акцентным цветом окно, которое будет выведено вперёд.",
+        switcherDimMinimized: "Затемнять свёрнутые окна",
         switcherMergeTabs: "Показывать одну запись на приложение",
         switcherMergeTabsCaption: "Сводит все окна приложения в одну запись в переключателе вместо отдельной записи на каждое окно.",
         switcherWindowlessApps: "Приложения без открытых окон",

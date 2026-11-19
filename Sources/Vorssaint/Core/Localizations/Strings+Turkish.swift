@@ -245,6 +245,7 @@ extension Strings {
         switcherPeekSelectedAppCaption: "Seçili uygulamanın pencerelerini, diğerlerinin sırasını değiştirmeden, zaten öndeymiş gibi yerinde gösterir.",
         switcherPeekHighlightSelected: "Seçili pencereyi vurgula",
         switcherPeekHighlightSelectedCaption: "Öne gelecek pencereyi vurgu rengiyle çerçeveler.",
+        switcherDimMinimized: "Simge durumundaki pencereleri soluklaştır",
         switcherMergeTabs: "Uygulama başına bir giriş göster",
         switcherMergeTabsCaption: "Değiştiricide pencere başına bir giriş yerine, bir uygulamanın tüm pencerelerini tek girişte toplar.",
         switcherWindowlessApps: "Açık penceresi olmayan uygulamalar",

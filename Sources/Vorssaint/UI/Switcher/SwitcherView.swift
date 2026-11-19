@@ -62,7 +62,23 @@ private struct SwitcherHiddenAppBadge: ViewModifier {
     }
 }
 
+/// Draws a minimized window grey and translucent when the option is on, so
+/// it reads at a glance as not on screen.
+private struct SwitcherMinimizedDim: ViewModifier {
+    let isMinimized: Bool
+    @AppStorage(DefaultsKey.switcherDimMinimized) private var dims = false
+
+    func body(content: Content) -> some View {
+        let on = dims && isMinimized
+        content.grayscale(on ? 1 : 0).opacity(on ? 0.5 : 1)
+    }
+}
+
 private extension View {
+    func switcherMinimizedDim(_ isMinimized: Bool) -> some View {
+        modifier(SwitcherMinimizedDim(isMinimized: isMinimized))
+    }
+
     func switcherHiddenAppBadge(_ isHidden: Bool, size: CGFloat) -> some View {
         modifier(SwitcherHiddenAppBadge(isHidden: isHidden, size: size))
     }
@@ -730,7 +746,10 @@ private struct SwitcherWindowTitleChip: View {
 
     @ObservedObject private var l10n = L10n.shared
 
-    var body: some View {
+    var body: some View { tileBody.switcherMinimizedDim(window.isMinimized) }
+
+    @ViewBuilder
+    private var tileBody: some View {
         HStack(spacing: 4) {
             if window.isMinimized {
                 Image(systemName: "minus.rectangle")
@@ -800,7 +819,10 @@ private struct SwitcherIconTile: View {
         return label
     }
 
-    var body: some View {
+    var body: some View { tileBody.switcherMinimizedDim(window.isMinimized) }
+
+    @ViewBuilder
+    private var tileBody: some View {
         VStack(spacing: SwitcherIconRowLayout.iconTileSpacing) {
             ZStack(alignment: .topTrailing) {
                 if let icon = window.appIcon {
@@ -885,7 +907,10 @@ private struct SwitcherWindowPreviewTile: View {
         !minimalPreviews && isHovering && window.windowID != nil
     }
 
-    var body: some View {
+    var body: some View { tileBody.switcherMinimizedDim(window.isMinimized) }
+
+    @ViewBuilder
+    private var tileBody: some View {
         VStack(spacing: 6) {
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -1057,7 +1082,10 @@ private struct WindowCard: View {
     /// badges across the row.
     private static let appBadgeArtworkInset: CGFloat = (appBadgeSize * 0.094).rounded()
 
-    var body: some View {
+    var body: some View { tileBody.switcherMinimizedDim(window.isMinimized) }
+
+    @ViewBuilder
+    private var tileBody: some View {
         VStack(spacing: SwitcherGridCard.titleSpacing) {
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)

@@ -245,6 +245,7 @@ extension Strings {
         switcherPeekSelectedAppCaption: "Zobrazí okná vybranej aplikácie na ich mieste, ako keby už bola vpredu, bez zmeny poradia ostatných.",
         switcherPeekHighlightSelected: "Zvýrazniť vybrané okno",
         switcherPeekHighlightSelectedCaption: "Orámuje farbou zvýraznenia okno, ktoré sa presunie dopredu.",
+        switcherDimMinimized: "Stlmiť minimalizované okná",
         switcherMergeTabs: "Zobraziť jednu položku na aplikáciu",
         switcherMergeTabsCaption: "Zlúči všetky okná aplikácie do jednej položky v prepínači namiesto jednej položky na každé okno.",
         switcherWindowlessApps: "Aplikácie bez otvoreného okna",

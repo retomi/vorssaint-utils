@@ -246,6 +246,7 @@ extension Strings {
         switcherPeekSelectedAppCaption: "선택한 앱의 윈도우를 이미 맨 앞에 있는 것처럼 제자리에 표시하며, 다른 윈도우의 순서는 바꾸지 않습니다.",
         switcherPeekHighlightSelected: "선택한 윈도우 강조",
         switcherPeekHighlightSelectedCaption: "맨 앞으로 올 윈도우를 강조 색상으로 테두리 표시합니다.",
+        switcherDimMinimized: "최소화된 윈도우 흐리게 표시",
         switcherMergeTabs: "앱별로 하나로 묶어 표시",
         switcherMergeTabsCaption: "전환기에서 앱의 모든 윈도우를 각각이 아닌 하나의 항목으로 묶습니다.",
         switcherWindowlessApps: "열린 윈도우가 없는 앱",

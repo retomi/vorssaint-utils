@@ -245,6 +245,7 @@ extension Strings {
         switcherPeekSelectedAppCaption: "Affiche les fenêtres de l’app sélectionnée à leur place, comme si elle était déjà au premier plan, sans changer l’ordre des autres.",
         switcherPeekHighlightSelected: "Mettre en évidence la fenêtre sélectionnée",
         switcherPeekHighlightSelectedCaption: "Entoure de la couleur d’accentuation la fenêtre qui passera au premier plan.",
+        switcherDimMinimized: "Estomper les fenêtres réduites",
         switcherMergeTabs: "Afficher une seule entrée par app",
         switcherMergeTabsCaption: "Regroupe toutes les fenêtres d’une app en une seule entrée dans le sélecteur, au lieu d’une entrée par fenêtre.",
         switcherWindowlessApps: "Apps sans fenêtre ouverte",

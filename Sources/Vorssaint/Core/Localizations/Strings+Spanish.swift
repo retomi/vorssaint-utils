@@ -245,6 +245,7 @@ extension Strings {
         switcherPeekSelectedAppCaption: "Muestra las ventanas de la app seleccionada en su sitio, como si ya estuviera al frente, sin cambiar el orden de las demás.",
         switcherPeekHighlightSelected: "Resaltar la ventana seleccionada",
         switcherPeekHighlightSelectedCaption: "Contornea con el color de acento la ventana que pasará al frente.",
+        switcherDimMinimized: "Atenuar las ventanas minimizadas",
         switcherMergeTabs: "Mostrar una entrada por app",
         switcherMergeTabsCaption: "Agrupa todas las ventanas de una app en una sola entrada del selector, en vez de una por ventana.",
         switcherWindowlessApps: "Apps sin ventanas abiertas",
