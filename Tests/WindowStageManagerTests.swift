@@ -102,6 +102,26 @@ enum WindowStageManagerTests {
                                                             menuBars: [CGRect(x: 0, y: 1083, width: 1728, height: 34)]) == main
                 && WindowStageManagerSupport.belowMenuBar(wide, screenFrame: wide, menuBars: []) == wide,
                      "a menu bar already excluded, or none at all, leaves the visible frame alone")
+        suite.expect(WindowLayoutGeometry.reappliesWithGaps(.leftHalf) && WindowLayoutGeometry.reappliesWithGaps(.maximize)
+                && !WindowLayoutGeometry.reappliesWithGaps(.fullScreen) && !WindowLayoutGeometry.reappliesWithGaps(.restore)
+                && !WindowLayoutGeometry.reappliesWithGaps(.nextDisplay),
+                     "only placements whose frame follows the gaps are applied again")
+        let bounds = CGRect(x: 16, y: 16, width: 1000, height: 600)
+        suite.expect(WindowLayoutGeometry.keptInside(CGRect(x: 900, y: -40, width: 300, height: 200), bounds: bounds)
+                        == CGRect(x: 716, y: 16, width: 300, height: 200)
+                && WindowLayoutGeometry.keptInside(CGRect(x: 0, y: 0, width: 1200, height: 400), bounds: bounds)
+                        == CGRect(x: 16, y: 16, width: 1000, height: 400)
+                && WindowLayoutGeometry.keptInside(CGRect(x: 100, y: 100, width: 200, height: 200), bounds: bounds)
+                        == CGRect(x: 100, y: 100, width: 200, height: 200),
+                     "a window past the screen gap moves back inside, shrinking only where it is larger")
+        let placedKey = WindowLayoutWindowKey(processID: 42, processLaunchTime: 7, windowID: 9)
+        let placedDefaults = UserDefaults(suiteName: "com.vorssaint.tests.placed-\(UUID())")!
+        let placedWindow = WindowLayoutPlacedWindow(frame: WindowLayoutFrame(origin: CGPoint(x: 8, y: 30),
+                                                                             size: CGSize(width: 700, height: 500)),
+                                                    action: .leftHalf)
+        WindowLayoutPlacedWindow.save([placedKey: placedWindow], to: placedDefaults)
+        suite.expect(WindowLayoutPlacedWindow.load(from: placedDefaults) == [placedKey: placedWindow],
+                     "snapped windows survive a restart of Vorssaint")
         suite.expect(Defaults.registeredDefaults[DefaultsKey.windowReserveStageManagerSpace] as? Bool == false,
                      "Stage Manager reservation is opt-in")
     }

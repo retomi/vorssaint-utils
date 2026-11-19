@@ -797,6 +797,8 @@ enum DefaultsKey {
     static let windowEdgeSnapEnabled = "windowEdgeSnapEnabled"
     static let windowEdgeSnapDisabledZones = "windowEdgeSnapDisabledZones" // comma-separated visual zone ids
     static let windowEdgeSnapZoneActions = "windowEdgeSnapZoneActions" // zone=action entries, + between split areas
+    static let windowKeepInsideScreenGap = "windowKeepInsideScreenGap" // pull windows dragged or resized past the screen gap back inside on release
+    static let windowLayoutPlacedWindows = "windowLayoutPlacedWindows" // JSON: last placement per window, for applying new gaps
     static let windowEdgeSnapRestoreOnDrag = "windowEdgeSnapRestoreOnDrag" // dragging a snapped window away restores its earlier size
     static let windowGestureEnabled = "windowGestureEnabled"
     static let windowGestureModifiers = "windowGestureModifiers"
@@ -2011,6 +2013,7 @@ enum Defaults {
         DefaultsKey.windowEdgeSnapDisabledZones: "",
         DefaultsKey.windowEdgeSnapZoneActions: "",
         DefaultsKey.windowEdgeSnapRestoreOnDrag: false,
+        DefaultsKey.windowKeepInsideScreenGap: false,
         DefaultsKey.windowGestureEnabled: false,
         DefaultsKey.windowGestureModifiers: WindowGestureSupport.defaultModifierStorageValue,
         DefaultsKey.windowGestureRaiseWindow: false,

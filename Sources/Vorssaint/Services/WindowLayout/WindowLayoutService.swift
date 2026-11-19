@@ -37,6 +37,17 @@ final class WindowLayoutService: ObservableObject {
 
     private var frameHistory = WindowLayoutHistory()
     private var lastActions: [WindowLayoutWindowKey: WindowLayoutAction] = [:]
+    // The frame and action of each window's last placement. A window still
+    // there was not moved by hand since, so new gaps may move it again. Kept
+    // in defaults so a restart of Vorssaint alone does not forget it; window
+    // keys carry the app's launch time, so a relaunched app never matches.
+    private var placedWindows: [WindowLayoutWindowKey: WindowLayoutPlacedWindow]
+        = WindowLayoutPlacedWindow.load() {
+        didSet { WindowLayoutPlacedWindow.save(placedWindows) }
+    }
+    private var lastPlacementUptime: TimeInterval = 0
+    private var keepInsideMonitor: Any?
+    private var keepInsidePress: WindowServerWindowCandidate?
     // What a window measured before the first placement of a run of snaps put
     // it where it is now. Dragging it out of the snapped place hands this size
     // back, so half then maximize still returns to the size before the half.
@@ -156,6 +167,9 @@ final class WindowLayoutService: ObservableObject {
         if addedPointerTap, directionalModifierTap != nil { unregisterDirectionalHotkey() }
         let wantsDirectional = directionalEnabled && inputAllowed && !ShortcutCapture.isCapturing
         wantsDirectional ? registerDirectionalHotkey() : unregisterDirectionalHotkey()
+
+        syncKeepInside(available && trusted
+                       && UserDefaults.standard.bool(forKey: DefaultsKey.windowKeepInsideScreenGap))
 
         // Its key pauses for a listed app like the ones above.
         PointerDisplayService.shared.syncWithPreferences()
@@ -378,6 +392,7 @@ final class WindowLayoutService: ObservableObject {
                                   visibleFrame: visibleFrame)
         if placement.frame == target.frame {
             lastActions[target.key] = effectiveAction
+            placedWindows[target.key] = WindowLayoutPlacedWindow(frame: target.frame, action: effectiveAction)
             if cyclePress != nil || UserDefaults.standard.bool(forKey: DefaultsKey.windowEdgeSnapRestoreOnDrag) {
                 settledFrames[target.key] = WindowLayoutSettledFrame(requested: target.frame,
                                                                      actual: target.frame,
@@ -403,11 +418,109 @@ final class WindowLayoutService: ObservableObject {
                     cyclePress: cyclePress) {
             if startsRun { restoreFrames[target.key] = historyFrame ?? target.frame }
             lastActions[target.key] = effectiveAction
+            placedWindows[target.key] = WindowLayoutPlacedWindow(frame: placement.frame, action: effectiveAction)
+            lastPlacementUptime = ProcessInfo.processInfo.systemUptime
             return finish(.success(restored: false))
         }
         frameHistory.discardLatest(for: target.key)
         restoreFrames[target.key] = previousRestoreFrame
         return finish(.failure(.failed))
+    }
+
+    /// Places every window again that still sits where its last placement
+    /// left it, so new gaps reach windows snapped before the change. Windows
+    /// moved or resized by hand since, or placed in an earlier app session,
+    /// are left alone.
+    @discardableResult
+    func reapplyToSnappedWindows() -> Int {
+        guard AXIsProcessTrusted(), let onScreen = onScreenWindowIDs() else { return 0 }
+        var count = 0
+        for (pid, keys) in Dictionary(grouping: placedWindows.keys, by: \.processID) {
+            guard let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else { continue }
+            let axApp = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(axApp, 0.35)
+            for window in windowsAttribute(axApp) ?? [] {
+                guard let target = target(from: window, app: app, onScreenWindowIDs: onScreen, capability: .frame),
+                      keys.contains(target.key),
+                      let placed = placedWindows[target.key],
+                      WindowLayoutGeometry.reappliesWithGaps(placed.action),
+                      target.frame.isClose(to: placed.frame, tolerance: frameTolerance),
+                      let screen = bestScreen(for: target.frame)
+                else { continue }
+                let visibleFrame = screen.windowLayoutVisibleFrame
+                let action = placed.action
+                let placement = placement(for: action, current: target.frame, visibleFrame: visibleFrame)
+                guard placement.frame != target.frame else { continue }
+                frameHistory.record(target.frame, for: target.key)
+                if setFrame(placement.frame, targetRect: placement.rect, screenVisibleFrame: visibleFrame,
+                            action: action, on: target.window, windowKey: target.key) {
+                    placedWindows[target.key] = WindowLayoutPlacedWindow(frame: placement.frame, action: action)
+                    count += 1
+                } else {
+                    frameHistory.discardLatest(for: target.key)
+                }
+            }
+        }
+        return count
+    }
+
+    // MARK: - Keep windows inside the screen gap
+
+    private func syncKeepInside(_ wanted: Bool) {
+        if wanted, keepInsideMonitor == nil {
+            // A passive monitor: it sees other apps' clicks without holding
+            // them, and a release is read only after it has been delivered.
+            keepInsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) {
+                [weak self] event in self?.handleKeepInside(event)
+            }
+        } else if !wanted, let monitor = keepInsideMonitor {
+            NSEvent.removeMonitor(monitor)
+            keepInsideMonitor = nil
+            keepInsidePress = nil
+        }
+    }
+
+    private func handleKeepInside(_ event: NSEvent) {
+        guard let point = event.cgEvent?.location else { return }
+        if event.type == .leftMouseDown {
+            keepInsidePress = WindowServerWindowHitTest.candidate(at: point) {
+                NSRunningApplication(processIdentifier: $0)?.activationPolicy == .regular
+            }
+            return
+        }
+        guard let press = keepInsidePress else { return }
+        keepInsidePress = nil
+        // Let the app commit the frame the drag left, and an edge snap
+        // released on the same click finish placing it first.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in self?.keepInside(press) }
+    }
+
+    /// Pulls a window dragged or resized past the screen gap back inside it,
+    /// shrinking it first when it is larger than the space the gap leaves.
+    private func keepInside(_ press: WindowServerWindowCandidate) {
+        guard ProcessInfo.processInfo.systemUptime - lastPlacementUptime > 1,
+              let app = NSRunningApplication(processIdentifier: press.pid), !app.isTerminated,
+              !WindowLayoutIgnoredApps.shared.contains(bundleID: app.bundleIdentifier,
+                                                       executablePath: app.executableURL?.path),
+              let onScreen = onScreenWindowIDs()
+        else { return }
+        let axApp = AXUIElementCreateApplication(press.pid)
+        AXUIElementSetMessagingTimeout(axApp, 0.35)
+        guard let target = (windowsAttribute(axApp) ?? []).lazy
+                .compactMap({ self.target(from: $0, app: app, onScreenWindowIDs: onScreen, capability: .frame) })
+                .first(where: { $0.windowID == press.windowID }),
+              // A click that moved nothing was not a drag.
+              !target.frame.isClose(to: WindowLayoutFrame(origin: press.frame.origin, size: press.frame.size),
+                                    tolerance: 1),
+              let screen = bestScreen(for: target.frame)
+        else { return }
+        let gap = WindowLayoutGaps.screenGap
+        let bounds = screen.windowLayoutVisibleFrame.insetBy(dx: gap, dy: gap)
+        let current = appKitFrame(fromAX: target.frame)
+        let inside = WindowLayoutGeometry.keptInside(current, bounds: bounds).integral
+        let frame = axFrame(fromAppKit: inside)
+        guard !frame.isClose(to: target.frame, tolerance: 1) else { return }
+        _ = setFrame(frame, on: target.window, windowKey: target.key)
     }
 
     /// Whether the window still sits where its last placement put it. A window
@@ -524,6 +637,7 @@ final class WindowLayoutService: ObservableObject {
         lastActions = lastActions.filter { activeWindows.contains($0.key) }
         settledFrames = settledFrames.filter { activeWindows.contains($0.key) }
         restoreFrames = restoreFrames.filter { activeWindows.contains($0.key) }
+        placedWindows = placedWindows.filter { activeWindows.contains($0.key) }
     }
 
     private func activeWindowKeys() -> Set<WindowLayoutWindowKey>? {

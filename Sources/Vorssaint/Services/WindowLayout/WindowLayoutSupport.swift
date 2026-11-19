@@ -363,6 +363,26 @@ enum WindowLayoutSideRepeat {
 }
 
 enum WindowLayoutGeometry {
+    /// Moves `rect` inside `bounds`, shrinking it first where it is larger.
+    static func keptInside(_ rect: NSRect, bounds: NSRect) -> NSRect {
+        guard bounds.width > 0, bounds.height > 0 else { return rect }
+        var result = rect
+        result.size.width = min(rect.width, bounds.width)
+        result.size.height = min(rect.height, bounds.height)
+        result.origin.x = min(max(rect.minX, bounds.minX), bounds.maxX - result.width)
+        result.origin.y = min(max(rect.minY, bounds.minY), bounds.maxY - result.height)
+        return result
+    }
+
+    /// Placements whose frame follows the gap settings. Full screen, Restore
+    /// and display moves keep a size the gaps never set.
+    static func reappliesWithGaps(_ action: WindowLayoutAction) -> Bool {
+        switch action {
+        case .fullScreen, .restore, .previousDisplay, .nextDisplay: return false
+        default: return true
+        }
+    }
+
     enum DisplayDirection {
         case left, right, up, down
     }
@@ -1041,7 +1061,7 @@ enum WindowLayoutGeometry {
 
 }
 
-struct WindowLayoutFrame: Equatable {
+struct WindowLayoutFrame: Equatable, Codable {
     var origin: CGPoint
     var size: CGSize
 
@@ -1063,7 +1083,7 @@ struct WindowLayoutSettledFrame: Equatable {
     var pressedAction: WindowLayoutAction? = nil
 }
 
-struct WindowLayoutWindowKey: Hashable {
+struct WindowLayoutWindowKey: Hashable, Codable {
     let processID: pid_t
     let processLaunchTime: TimeInterval
     let windowID: CGWindowID
@@ -1115,5 +1135,31 @@ struct WindowLayoutHistory {
 
     mutating func removeStaleWindows(keeping activeWindows: Set<WindowLayoutWindowKey>) {
         framesByWindow = framesByWindow.filter { activeWindows.contains($0.key) }
+    }
+}
+
+extension WindowLayoutAction: Codable {}
+
+/// A window's last placement, remembered across restarts of Vorssaint.
+struct WindowLayoutPlacedWindow: Codable, Equatable {
+    let frame: WindowLayoutFrame
+    let action: WindowLayoutAction
+
+    private struct Entry: Codable {
+        let key: WindowLayoutWindowKey
+        let placed: WindowLayoutPlacedWindow
+    }
+
+    static func load(from defaults: UserDefaults = .standard) -> [WindowLayoutWindowKey: WindowLayoutPlacedWindow] {
+        guard let data = defaults.data(forKey: DefaultsKey.windowLayoutPlacedWindows),
+              let entries = try? JSONDecoder().decode([Entry].self, from: data)
+        else { return [:] }
+        return Dictionary(entries.map { ($0.key, $0.placed) }, uniquingKeysWith: { _, last in last })
+    }
+
+    static func save(_ windows: [WindowLayoutWindowKey: WindowLayoutPlacedWindow],
+                     to defaults: UserDefaults = .standard) {
+        let entries = windows.map { Entry(key: $0.key, placed: $0.value) }
+        defaults.set(try? JSONEncoder().encode(entries), forKey: DefaultsKey.windowLayoutPlacedWindows)
     }
 }
