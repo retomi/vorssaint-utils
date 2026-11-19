@@ -131,6 +131,8 @@ enum DefaultsKey {
     static let switcherIgnoreHoverSelection = "switcherIgnoreHoverSelection" // pointer movement does not change the highlight; click still commits
     static let switcherShiftStepsBack = "switcherShiftStepsBack" // a bare Shift press mid-session selects the previous item (issue #784)
     static let switcherTabStepsThroughWindows = "switcherTabStepsThroughWindows" // icon row: the app shortcut visits each window, app by app
+    static let switcherPeekSelectedApp = "switcherPeekSelectedApp" // draw the selected app's windows in place, below the switcher, without raising them
+    static let switcherPeekHighlightSelected = "switcherPeekHighlightSelected" // outline the selected window in that peek
     static let switcherScreenPlacement = "switcherScreenPlacement" // SwitcherScreenPlacement raw value: which display the panel opens on
     static let switcherCurrentDisplayOnly = "switcherCurrentDisplayOnly" // list only windows on the display under the pointer (issue #1391)
     static let switcherMaxColumns = "switcherMaxColumns" // 0 = Auto, else the most items per row (SwitcherSupport.maxColumnsRange)
@@ -1336,6 +1338,8 @@ enum Defaults {
         DefaultsKey.switcherIgnoreHoverSelection: false,
         DefaultsKey.switcherShiftStepsBack: true,
         DefaultsKey.switcherTabStepsThroughWindows: false,
+        DefaultsKey.switcherPeekSelectedApp: false,
+        DefaultsKey.switcherPeekHighlightSelected: true,
         DefaultsKey.switcherScreenPlacement: SwitcherScreenPlacement.fallback.rawValue,
         DefaultsKey.switcherCurrentDisplayOnly: false,
         DefaultsKey.switcherMaxColumns: 0,

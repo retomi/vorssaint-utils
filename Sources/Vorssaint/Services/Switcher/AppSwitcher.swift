@@ -37,6 +37,7 @@ final class AppSwitcher: ObservableObject {
             cancelLetterConfirmation()
             updateIconRowLayoutForCurrentSelection()
             revealSelectedIconInVisibleRow()
+            updateSelectionPeek()
             if sessionActive, simpleModeEnabled, !usesWindowRow {
                 resizePanel(animated: !UserDefaults.standard.bool(forKey: DefaultsKey.switcherInstantSelection))
             }
@@ -1802,6 +1803,7 @@ final class AppSwitcher: ObservableObject {
         // window left); the app in front still keeps the settling retry.
         let handoffSourcePID = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let previousWindowID = sessionStartWindowID
+        if selection != nil { lingerSelectionPeek() }
         endSession()
         if let selection {
             recordUse(selection, previous: previousWindowID)
@@ -1836,6 +1838,7 @@ final class AppSwitcher: ObservableObject {
         pendingShow = nil
         cancelPendingPreviewBatch()
         panel?.orderOut(nil)
+        updateSelectionPeek()
         unregisterSecureInputActionHotKeys()
         sessionItems = []
         sessionWindowServerSnapshot = nil
@@ -1922,6 +1925,32 @@ final class AppSwitcher: ObservableObject {
         panel.animationBehavior = .none
         panel.orderFrontRegardless()
         panel.animationBehavior = animationBehavior
+        updateSelectionPeek()
+    }
+
+    private func lingerSelectionPeek() {
+        MainActor.assumeIsolated { SwitcherSelectionPeek.shared.lingerOnNextHide() }
+    }
+
+    private func updateSelectionPeek() {
+        guard sessionActive, panel?.isVisible == true,
+              UserDefaults.standard.bool(forKey: DefaultsKey.switcherPeekSelectedApp) else {
+            MainActor.assumeIsolated { SwitcherSelectionPeek.shared.hide() }
+            return
+        }
+        let items = SwitcherSupport.peekItems(items: windows, selectedIndex: selectedIndex)
+        // ponytail: the next two selections and the previous one, where Tab
+        // and Shift+Tab go; widen if stepping further ahead still waits.
+        let stepsThroughWindows = UserDefaults.standard.bool(forKey: DefaultsKey.switcherTabStepsThroughWindows)
+        let upcoming = [1, 2, -1].flatMap { delta in
+            SwitcherSupport.peekItems(items: windows, selectedIndex: stepsThroughWindows
+                ? SwitcherSupport.nextGroupedWindowSelectionIndex(items: windows, selectedIndex: selectedIndex, delta: delta)
+                : SwitcherSupport.nextAppSelectionIndex(items: windows, selectedIndex: selectedIndex, delta: delta))
+        }
+        let highlights = UserDefaults.standard.bool(forKey: DefaultsKey.switcherPeekHighlightSelected)
+        MainActor.assumeIsolated { SwitcherSelectionPeek.shared.show(
+            items, upcoming: upcoming,
+            highlightsSelected: highlights) }
     }
 
     /// A click outside cancels before the event continues through the session
@@ -2289,3 +2318,4 @@ struct SwitcherGrid: Equatable {
                             panelSize: CGSize(width: width, height: height))
     }
 }
+

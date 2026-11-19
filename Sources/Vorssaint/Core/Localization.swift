@@ -407,6 +407,10 @@ struct Strings {
     let switcherShiftStepsBackCaption: String
     let switcherTabStepsThroughWindows: String
     let switcherTabStepsThroughWindowsCaption: String
+    let switcherPeekSelectedApp: String
+    let switcherPeekSelectedAppCaption: String
+    let switcherPeekHighlightSelected: String
+    let switcherPeekHighlightSelectedCaption: String
     let switcherMergeTabs: String
     let switcherMergeTabsCaption: String
     let switcherWindowlessApps: String
@@ -1581,6 +1585,10 @@ extension Strings {
         switcherShiftStepsBackCaption: "Pressionar Shift com o seletor aberto seleciona o item anterior. Shift+Tab e ← sempre voltam.",
         switcherTabStepsThroughWindows: "Tab percorre também as janelas",
         switcherTabStepsThroughWindowsCaption: "Nos ícones grandes, Tab passa por cada janela do app antes de ir para o próximo app.",
+        switcherPeekSelectedApp: "Mostrar o app selecionado na frente",
+        switcherPeekSelectedAppCaption: "Exibe as janelas do app selecionado no lugar delas, como se ele já estivesse na frente, sem mudar a ordem das outras.",
+        switcherPeekHighlightSelected: "Destacar a janela selecionada",
+        switcherPeekHighlightSelectedCaption: "Contorna com a cor de destaque a janela que será trazida para a frente.",
         switcherMergeTabs: "Mostrar uma entrada por app",
         switcherMergeTabsCaption: "Junta todas as janelas de um app em uma só entrada no alternador, em vez de uma por janela.",
         switcherWindowlessApps: "Apps sem janela aberta",
@@ -2716,6 +2724,10 @@ extension Strings {
         switcherShiftStepsBackCaption: "Pressing Shift while the switcher is open selects the previous item. Shift+Tab and ← always go back.",
         switcherTabStepsThroughWindows: "Tab steps through windows too",
         switcherTabStepsThroughWindowsCaption: "With large icons, Tab visits each of an app’s windows before moving to the next app.",
+        switcherPeekSelectedApp: "Show the selected app in front",
+        switcherPeekSelectedAppCaption: "Draws the selected app’s windows in place, as if it were already in front, without changing the order of the others.",
+        switcherPeekHighlightSelected: "Highlight the selected window",
+        switcherPeekHighlightSelectedCaption: "Outlines the window that will come to the front in the accent color.",
         switcherMergeTabs: "Show one entry per app",
         switcherMergeTabsCaption: "Collapses all of an app’s windows into one entry in the switcher, instead of one entry per window.",
         switcherWindowlessApps: "Apps with no open window",
