@@ -38,10 +38,10 @@ struct PanelWindowLayoutView: View {
                 .topThird, .middleThird, .bottomThird, .topTwoThirds, .bottomTwoThirds,
             ])
             actionGroup(title: text.quarterRows, actions: [
-                .topQuarter, .upperMiddleQuarter, .lowerMiddleQuarter, .bottomQuarter,
+                .topQuarter, .upperMiddleQuarter, .lowerMiddleQuarter, .bottomQuarter, .topThreeQuarters, .bottomThreeQuarters,
             ])
             actionGroup(title: text.quarterColumns, actions: [
-                .leftQuarter, .leftMiddleQuarter, .rightMiddleQuarter, .rightQuarter,
+                .leftQuarter, .leftMiddleQuarter, .rightMiddleQuarter, .rightQuarter, .leftThreeQuarters, .rightThreeQuarters,
             ])
             actionGroup(title: text.sixths, actions: [
                 .topLeftSixth, .topCenterSixth, .topRightSixth,

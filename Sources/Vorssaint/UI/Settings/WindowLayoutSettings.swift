@@ -357,10 +357,10 @@ struct WindowLayoutSettings: View {
         .topThird, .middleThird, .bottomThird, .topTwoThirds, .bottomTwoThirds,
     ]
     private static let quarterRowActions: [WindowLayoutAction] = [
-        .topQuarter, .upperMiddleQuarter, .lowerMiddleQuarter, .bottomQuarter,
+        .topQuarter, .upperMiddleQuarter, .lowerMiddleQuarter, .bottomQuarter, .topThreeQuarters, .bottomThreeQuarters,
     ]
     private static let quarterColumnActions: [WindowLayoutAction] = [
-        .leftQuarter, .leftMiddleQuarter, .rightMiddleQuarter, .rightQuarter,
+        .leftQuarter, .leftMiddleQuarter, .rightMiddleQuarter, .rightQuarter, .leftThreeQuarters, .rightThreeQuarters,
     ]
     private static let sixthActions: [WindowLayoutAction] = [
         .topLeftSixth, .topCenterSixth, .topRightSixth,

@@ -849,8 +849,8 @@ final class WindowLayoutService: ObservableObject {
         case .leftHalf, .rightHalf, .topHalf, .bottomHalf, .centerHalf,
                 .leftThird, .centerThird, .rightThird, .leftTwoThirds, .rightTwoThirds, .centerTwoThirds,
                 .topThird, .middleThird, .bottomThird, .topTwoThirds, .bottomTwoThirds,
-                .topQuarter, .upperMiddleQuarter, .lowerMiddleQuarter, .bottomQuarter,
-                .leftQuarter, .leftMiddleQuarter, .rightMiddleQuarter, .rightQuarter,
+                .topQuarter, .upperMiddleQuarter, .lowerMiddleQuarter, .bottomQuarter, .topThreeQuarters, .bottomThreeQuarters,
+                .leftQuarter, .leftMiddleQuarter, .rightMiddleQuarter, .rightQuarter, .leftThreeQuarters, .rightThreeQuarters,
                 .topLeftSixth, .topCenterSixth, .topRightSixth,
                 .bottomLeftSixth, .bottomCenterSixth, .bottomRightSixth,
                 .topLeft, .topRight, .bottomLeft, .bottomRight, .marginMaximize:

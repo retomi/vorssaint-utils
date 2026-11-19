@@ -272,6 +272,10 @@ enum WindowLayoutFeatureTests {
             (.leftMiddleQuarter, 68, DefaultsKey.windowLayoutShortcutLeftMiddleQuarter),
             (.rightMiddleQuarter, 69, DefaultsKey.windowLayoutShortcutRightMiddleQuarter),
             (.rightQuarter, 70, DefaultsKey.windowLayoutShortcutRightQuarter),
+            (.topThreeQuarters, 71, DefaultsKey.windowLayoutShortcutTopThreeQuarters),
+            (.bottomThreeQuarters, 72, DefaultsKey.windowLayoutShortcutBottomThreeQuarters),
+            (.leftThreeQuarters, 73, DefaultsKey.windowLayoutShortcutLeftThreeQuarters),
+            (.rightThreeQuarters, 74, DefaultsKey.windowLayoutShortcutRightThreeQuarters),
             (.topThird, 61, DefaultsKey.windowLayoutShortcutTopThird),
             (.middleThird, 62, DefaultsKey.windowLayoutShortcutMiddleThird),
             (.bottomThird, 63, DefaultsKey.windowLayoutShortcutBottomThird),
@@ -310,6 +314,10 @@ enum WindowLayoutFeatureTests {
                     && !layoutStrings.leftMiddleQuarter.isEmpty
                     && !layoutStrings.rightMiddleQuarter.isEmpty
                     && !layoutStrings.rightQuarter.isEmpty
+                    && !layoutStrings.topThreeQuarters.isEmpty
+                    && !layoutStrings.bottomThreeQuarters.isEmpty
+                    && !layoutStrings.leftThreeQuarters.isEmpty
+                    && !layoutStrings.rightThreeQuarters.isEmpty
                     && !layoutStrings.topQuarter.isEmpty
                     && !layoutStrings.upperMiddleQuarter.isEmpty
                     && !layoutStrings.lowerMiddleQuarter.isEmpty
@@ -849,6 +857,10 @@ enum WindowLayoutFeatureTests {
             (.leftMiddleQuarter, CGRect(x: 360, y: 40, width: 360, height: 860)),
             (.rightMiddleQuarter, CGRect(x: 720, y: 40, width: 360, height: 860)),
             (.rightQuarter, CGRect(x: 1080, y: 40, width: 360, height: 860)),
+            (.topThreeQuarters, CGRect(x: 0, y: 255, width: 1440, height: 645)),
+            (.bottomThreeQuarters, CGRect(x: 0, y: 40, width: 1440, height: 645)),
+            (.leftThreeQuarters, CGRect(x: 0, y: 40, width: 1080, height: 860)),
+            (.rightThreeQuarters, CGRect(x: 360, y: 40, width: 1080, height: 860)),
             (.topThird, CGRect(x: 0, y: 613, width: 1440, height: 287)),
             (.middleThird, CGRect(x: 0, y: 326, width: 1440, height: 288)),
             (.bottomThird, CGRect(x: 0, y: 40, width: 1440, height: 287)),

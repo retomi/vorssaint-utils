@@ -421,9 +421,9 @@ enum WindowEdgeSnapPlacementGroup: CaseIterable {
             return [.leftThird, .centerThird, .rightThird, .leftTwoThirds, .rightTwoThirds, .centerTwoThirds,
                     .topThird, .middleThird, .bottomThird, .topTwoThirds, .bottomTwoThirds]
         case .quarterRows:
-            return [.topQuarter, .upperMiddleQuarter, .lowerMiddleQuarter, .bottomQuarter]
+            return [.topQuarter, .upperMiddleQuarter, .lowerMiddleQuarter, .bottomQuarter, .topThreeQuarters, .bottomThreeQuarters]
         case .quarterColumns:
-            return [.leftQuarter, .leftMiddleQuarter, .rightMiddleQuarter, .rightQuarter]
+            return [.leftQuarter, .leftMiddleQuarter, .rightMiddleQuarter, .rightQuarter, .leftThreeQuarters, .rightThreeQuarters]
         case .sixths:
             return [.topLeftSixth, .topCenterSixth, .topRightSixth,
                     .bottomLeftSixth, .bottomCenterSixth, .bottomRightSixth]
