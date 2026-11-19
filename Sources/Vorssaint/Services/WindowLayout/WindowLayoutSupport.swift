@@ -419,23 +419,34 @@ enum WindowLayoutGeometry {
     /// from the same side count, so a left after a right third starts over.
     static func sideCycleAction(for action: WindowLayoutAction,
                                 previousAction: WindowLayoutAction?) -> WindowLayoutAction? {
-        let cycle: [WindowLayoutAction]
-        switch action {
-        case .leftHalf: cycle = [.leftHalf, .leftTwoThirds, .leftThird]
-        case .rightHalf: cycle = [.rightHalf, .rightTwoThirds, .rightThird]
-        default: return nil
-        }
-        guard let previousAction, let index = cycle.firstIndex(of: previousAction) else { return nil }
+        guard let cycle = sideCycle(for: action),
+              let previousAction, let index = cycle.firstIndex(of: previousAction) else { return nil }
         return cycle[(index + 1) % cycle.count]
     }
 
-    /// The key a placement records for the size cycle: only a left or right
-    /// half pressed while the cycle is on. Every other placement records none,
+    /// The sizes a repeated side key steps through: a half keeps its half,
+    /// two thirds, one third cycle; any other edge strip alternates with the
+    /// half on its own side, so pressing a 1/4 shortcut again gives the half
+    /// and once more the 1/4.
+    static func sideCycle(for action: WindowLayoutAction) -> [WindowLayoutAction]? {
+        switch action {
+        case .leftHalf: return [.leftHalf, .leftTwoThirds, .leftThird]
+        case .rightHalf: return [.rightHalf, .rightTwoThirds, .rightThird]
+        case .leftQuarter, .leftThird, .leftTwoThirds, .leftThreeQuarters: return [action, .leftHalf]
+        case .rightQuarter, .rightThird, .rightTwoThirds, .rightThreeQuarters: return [action, .rightHalf]
+        case .topQuarter, .topThird, .topTwoThirds, .topThreeQuarters: return [action, .topHalf]
+        case .bottomQuarter, .bottomThird, .bottomTwoThirds, .bottomThreeQuarters: return [action, .bottomHalf]
+        default: return nil
+        }
+    }
+
+    /// The key a placement records for the size cycle: only a side key with
+    /// a cycle, pressed while the cycle is on. Every other placement records none,
     /// so a two thirds shortcut or a pointer snap is never read back for the
     /// cycle and the next side press starts again at the half.
     static func sideCyclePress(for action: WindowLayoutAction,
                                cyclesThirds: Bool) -> WindowLayoutAction? {
-        guard cyclesThirds, action == .leftHalf || action == .rightHalf else { return nil }
+        guard cyclesThirds, sideCycle(for: action) != nil else { return nil }
         return action
     }
 

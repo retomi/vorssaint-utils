@@ -1552,9 +1552,17 @@ enum WindowLayoutFeatureTests {
         suite.expect(WindowLayoutGeometry.sideCyclePress(for: .leftHalf, cyclesThirds: true) == .leftHalf
                 && WindowLayoutGeometry.sideCyclePress(for: .rightHalf, cyclesThirds: true) == .rightHalf
                 && WindowLayoutGeometry.sideCyclePress(for: .leftHalf, cyclesThirds: false) == nil
-                && WindowLayoutGeometry.sideCyclePress(for: .leftTwoThirds, cyclesThirds: true) == nil
-                && WindowLayoutGeometry.sideCyclePress(for: .topHalf, cyclesThirds: true) == nil,
-               "window layout records a side key for the cycle only for left or right halves while the cycle is on")
+                && WindowLayoutGeometry.sideCyclePress(for: .leftTwoThirds, cyclesThirds: true) == .leftTwoThirds
+                && WindowLayoutGeometry.sideCyclePress(for: .leftQuarter, cyclesThirds: false) == nil
+                && WindowLayoutGeometry.sideCyclePress(for: .topHalf, cyclesThirds: true) == nil
+                && WindowLayoutGeometry.sideCyclePress(for: .centerThird, cyclesThirds: true) == nil,
+               "window layout records a side key for the cycle only for edge placements with a cycle while it is on")
+        suite.expect(WindowLayoutGeometry.sideCycleAction(for: .leftQuarter, previousAction: .leftQuarter) == .leftHalf
+                && WindowLayoutGeometry.sideCycleAction(for: .leftQuarter, previousAction: .leftHalf) == .leftQuarter
+                && WindowLayoutGeometry.sideCycleAction(for: .rightThreeQuarters, previousAction: .rightThreeQuarters) == .rightHalf
+                && WindowLayoutGeometry.sideCycleAction(for: .topThird, previousAction: .topThird) == .topHalf
+                && WindowLayoutGeometry.sideCycleAction(for: .leftHalf, previousAction: .leftHalf) == .leftTwoThirds,
+               "a repeated edge strip alternates with the half on its side; a half keeps its thirds cycle")
         let pressedLeft = WindowLayoutSettledFrame(requested: settledHalf, actual: settledHalf, pressedAction: .leftHalf)
         suite.expect(WindowLayoutGeometry.sideCycleResumes(pressing: .leftHalf, settled: pressedLeft)
                 && WindowLayoutGeometry.sideCycleResumes(pressing: .rightHalf, settled: pressedLeft) == false
