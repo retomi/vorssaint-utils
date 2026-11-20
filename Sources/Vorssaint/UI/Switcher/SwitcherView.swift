@@ -829,8 +829,8 @@ private struct SwitcherIconTile: View {
                     Image(nsImage: icon)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: isSelected ? SwitcherIconRowLayout.selectedIconSize : SwitcherIconRowLayout.iconSize,
-                               height: isSelected ? SwitcherIconRowLayout.selectedIconSize : SwitcherIconRowLayout.iconSize)
+                        .frame(width: SwitcherIconRowLayout.selectedIconSize,
+                               height: SwitcherIconRowLayout.selectedIconSize)
                         .switcherHiddenAppBadge(window.isAppHidden, size: 18)
                 }
                 if windowCount > 1 {
@@ -878,9 +878,6 @@ private struct SwitcherIconTile: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .onTapGesture(perform: onCommit)
-        .scaleEffect(isSelected ? 1 : 0.96)
-        .animation(animatesSelection ? .spring(response: 0.24, dampingFraction: 0.82) : nil,
-                   value: isSelected)
         .accessibilityLabel(spokenLabel)
     }
 }
