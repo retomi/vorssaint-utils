@@ -29,6 +29,7 @@ enum DefaultsKey {
     static let keepAwakeAllowDisplaySleep = "keepAwakeAllowDisplaySleep"
     static let keepAwakeExternalDisplay = "keepAwakeExternalDisplay"
     static let keepAwakeConnectedToPower = "keepAwakeConnectedToPower"
+    static let keepAwakePowerDisconnectDelay = "keepAwakePowerDisconnectDelaySeconds"
     static let keepAwakeRunningApps = "keepAwakeRunningApps"
     static let keepAwakeRunningAppBundleIDs = "keepAwakeRunningAppBundleIDs"
     // Match mode over the automation conditions: false is Any (one matching
@@ -472,6 +473,8 @@ enum DefaultsKey {
     // Machine-only recovery state. A true value means the helper must confirm
     // automatic fan control before this marker can be cleared.
     static let fanControlRecoveryNeeded = "fanControlRecoveryNeeded"
+    static let fanControlInterruptedStop = "fanControlInterruptedStop"
+    static let fanControlDismissedStop = "fanControlDismissedStop"
     static let fanControlHelperVersion = "fanControlHelperVersion"
     // System monitor — per-metric history graphs (each independently toggleable).
     static let monitorGraphCPU = "monitorGraphCPU"
@@ -633,6 +636,7 @@ enum DefaultsKey {
     static let screenOCRDetectQRCodes = "screenOCRDetectQRCodes" // QR content wins over OCR text
     static let micMuteShortcutEnabled = "micMuteShortcutEnabled"
     static let micMuteShortcut = "micMuteShortcut"
+    static let micMuteFollowCallApps = "micMuteFollowCallApps"
     static let quitAppsShortcutEnabled = "quitAppsShortcutEnabled"
     static let quitAppsShortcut = "quitAppsShortcut"
     static let quitAppsExceptFrontShortcutEnabled = "quitAppsExceptFrontShortcutEnabled"
@@ -937,6 +941,7 @@ enum DefaultsKey {
     static let notchAgentsCodexProfiles = "notchAgentsCodexProfiles"
     static let notchAgentsOpenCode = "notchAgentsOpenCode"
     static let notchAgentsCopilot = "notchAgentsCopilot"
+    static let notchAgentsCursor = "notchAgentsCursor"
     static let notchAgentsCardOrder = "notchAgentsCardOrder"
     static let notchAgentsHiddenCards = "notchAgentsHiddenCards"
     static let notchAgentsPeriod = "notchAgentsPeriod"
@@ -1220,6 +1225,7 @@ enum Defaults {
     static let allowedDurations = [0, 15, 30, 60, 120, 240, 480]
     static let allowedKeepAwakeMouseJiggleIntervals = [1, 2, 5, 10, 15]
     static let allowedBatteryLimits = [0, 5, 10, 15, 20]
+    static let allowedKeepAwakePowerDisconnectDelays = Array(stride(from: 0, through: 60, by: 5))
     static let allowedMonitorIntervals = [1, 2, 5]
     static let defaultKeyboardDebounceWindowMs = 5
     static let defaultSnippetSoundName = "Tink"
@@ -1265,6 +1271,7 @@ enum Defaults {
         DefaultsKey.keepAwakeAllowDisplaySleep: false,
         DefaultsKey.keepAwakeExternalDisplay: false,
         DefaultsKey.keepAwakeConnectedToPower: false,
+        DefaultsKey.keepAwakePowerDisconnectDelay: 0,
         DefaultsKey.keepAwakeRunningApps: false,
         DefaultsKey.keepAwakeRunningAppBundleIDs: [String](),
         DefaultsKey.keepAwakeAutomationRequireAll: false,
@@ -1550,6 +1557,7 @@ enum Defaults {
         DefaultsKey.notchAgentsCodexProfiles: "",
         DefaultsKey.notchAgentsOpenCode: true,
         DefaultsKey.notchAgentsCopilot: true,
+        DefaultsKey.notchAgentsCursor: true,
         DefaultsKey.notchAgentsCardOrder: "",
         DefaultsKey.notchAgentsHiddenCards: "",
         DefaultsKey.notchAgentsPeriod: AgentPeriod.today.rawValue,
@@ -1889,6 +1897,7 @@ enum Defaults {
         DefaultsKey.screenOCRDetectQRCodes: true,
         DefaultsKey.micMuteShortcutEnabled: false,
         DefaultsKey.micMuteShortcut: GlobalShortcut.micMuteDefault.storageValue,
+        DefaultsKey.micMuteFollowCallApps: false,
         DefaultsKey.quitAppsShortcutEnabled: false,
         DefaultsKey.quitAppsShortcut: GlobalShortcut.quitAllDefault.storageValue,
         DefaultsKey.quitAppsExceptFrontShortcutEnabled: false,
@@ -2563,6 +2572,10 @@ enum Defaults {
 
     static func sanitizedBatteryLimit(_ percent: Int) -> Int {
         allowedBatteryLimits.contains(percent) ? percent : 10
+    }
+
+    static func sanitizedKeepAwakePowerDisconnectDelay(_ seconds: Int) -> Int {
+        allowedKeepAwakePowerDisconnectDelays.contains(seconds) ? seconds : 0
     }
 
     static func sanitizedKeepAwakeMouseJiggleInterval(_ minutes: Int) -> Int {

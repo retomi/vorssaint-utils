@@ -28,7 +28,7 @@ struct BrightnessDisplay: Identifiable, Equatable {
         let target: BrightnessSupport.SpeakerTarget
         /// 0...1 for the UI slider.
         var volume: Double
-        /// Nil at zero when there is no native mute or known level to restore.
+        /// Nil when the monitor has no confirmed native mute control.
         var muted: Bool?
     }
 
@@ -59,9 +59,10 @@ struct BrightnessDisplay: Identifiable, Equatable {
 /// external monitors are driven over DDC/CI, the same protocol their own
 /// buttons use, addressed per display through its I2C service.
 ///
-/// Display control stops its screen observer, brightness routes and I2C work
-/// when turned off. Pending restores keep wake and lid observation until they
-/// succeed. Keyboard light state is read when Quick toggles opens or one of
+/// Turning display control off removes its screen observer and brightness routes.
+/// An accepted speaker unmute finishes verification on its original connection.
+/// Pending restores keep wake and lid observation until they succeed.
+/// Keyboard light state is read when Quick toggles opens or one of
 /// its global shortcuts is pressed.
 /// While display control is on, the service observes screen changes, unlock
 /// and sleep/wake events, with no standing timers. Everything else
@@ -138,9 +139,16 @@ final class BrightnessService: ObservableObject {
         let path: String
         let fingerprint: String
         let service: CFTypeRef
+        let registryEntryID: UInt64?
         let chipAddress: UInt32
         let hasNativeMute: Bool
         let unmutesLeavingZero: Bool
+        var muteVersion: UInt16? = nil
+
+        var sliderEndpoint: SpeakerSliderFeedback.Endpoint {
+            let id = registryEntryID == 0 ? nil : registryEntryID
+            return .init(registryEntryID: id, fallbackService: id == nil ? service : nil, chipAddress: chipAddress)
+        }
     }
 
     private struct Route {
@@ -222,19 +230,24 @@ final class BrightnessService: ObservableObject {
     private var pendingLevels: [CGDirectDisplayID: PendingWrite] = [:]
     private var audioRoutes: [CGDirectDisplayID: AudioRoute] = [:]
     private var audioLifetime: UInt64 = 0
+    private var disabledSpeakerLifetime: UInt64?
     private var speakerLevelRevisions: [String: UInt64] = [:]
+    private var speakerSliderIntents: [String: SpeakerSliderFeedback.Request] = [:]
     /// Includes real external displays that have no controllable row in the panel.
     private var audioDisplayNames: [(id: UInt32, name: String)] = []
-    /// Only the DDC queue touches these confirmed, per-connection levels.
-    // The level and unmute are separate DDC writes. A newer slider request
-    // inherits the unfinished unmute only on this physical connection.
+    /// Only the DDC queue touches these records. The path includes the display
+    /// fingerprint and I/O location. A new registry endpoint on the same port
+    /// must prove its own zero readback.
+    private var confirmedZeroUnmutes: [String: (entryID: UInt64, chip: UInt32)] = [:]
+    /// The level and unmute are separate DDC writes. A newer slider request
+    /// inherits the unfinished unmute only on this physical connection.
     private var pendingSpeakerUnmutes: [String: UInt64] = [:]
-    private var speakerRestoreLevels: [String: BrightnessSupport.SpeakerLevel] = [:]
     private struct PendingAudio {
         let target: BrightnessSupport.SpeakerTarget
         let change: BrightnessSupport.SpeakerChange
         let requiresKeys: Bool
         let levelRevision: UInt64?
+        let sliderFeedback: SpeakerSliderFeedback.Request?
         let completion: (Bool) -> Void
     }
     /// Main-thread queue. One DDC transaction at a time shares workQueue with brightness.
@@ -558,7 +571,7 @@ final class BrightnessService: ObservableObject {
     func syncWithPreferences() {
         let wanted = AppFeature.brightness.isAvailable
             && UserDefaults.standard.bool(forKey: DefaultsKey.brightnessControlEnabled)
-        if wanted { start() } else if running { stop() }
+        if wanted { start() } else if running { stop(disablingControls: true) }
         // Switching the speaker controls on has to ask the monitors about
         // them, and switching them off has to drop what was found: neither is
         // a topology change, so the scan has to be forced.
@@ -568,9 +581,7 @@ final class BrightnessService: ObservableObject {
         if needsAudioScan { audioScanQueued = wantsMonitorVolume }
         stateLock.unlock()
         if !wantsMonitorVolume {
-            stateLock.withLock {
-                if !audioRoutes.isEmpty { audioLifetime &+= 1; audioRoutes = [:] }
-            }
+            stateLock.withLock { invalidateSpeakerRoutes(disablingControls: true) }
             cancelPendingAudio()
             if displays.contains(where: { $0.audio != nil }) {
                 displays = displays.map { var display = $0; display.audio = nil; return display }
@@ -661,7 +672,15 @@ final class BrightnessService: ObservableObject {
         refresh()
     }
 
-    func stop() {
+    func stop(disablingControls: Bool = false) {
+        stateLock.withLock {
+            rebuildGeneration += 1
+            invalidateSpeakerRoutes(disablingControls: disablingControls)
+        }
+        tearDownDisplayControls()
+    }
+
+    private func tearDownDisplayControls() {
         // Keep the reset guard intact while preferences or feature state
         // changes during the asynchronous permission teardown. The reset
         // owner releases it explicitly through resumeInputTaps().
@@ -684,12 +703,9 @@ final class BrightnessService: ObservableObject {
         rebuildDebounce?.cancel()
         rebuildDebounce = nil
         stateLock.lock()
-        rebuildGeneration += 1
         rebuildingTopology = nil
         routes = [:]
         pendingLevels = [:]
-        audioRoutes = [:]
-        audioLifetime &+= 1
         speakerLevelRevisions.removeAll()
         scannedAudio = false
         audioScanQueued = nil
@@ -702,8 +718,8 @@ final class BrightnessService: ObservableObject {
         stateLock.unlock()
         cancelPendingAudio()
         workQueue.async { [weak self] in
-            self?.speakerRestoreLevels = [:]
             self?.pendingSpeakerUnmutes = [:]
+            self?.confirmedZeroUnmutes = [:]
         }
         ddcPendingSteps = [:]
         pendingDisplayIDs = []
@@ -1262,21 +1278,25 @@ final class BrightnessService: ObservableObject {
         }
     }
 
+    /// Launch creates the service for recovery only when the saved list contains
+    /// a valid display ID, even if display controls are no longer installed.
+    static var hasDisplaysToRestore: Bool {
+        BrightnessSupport.hasDisplaysToRestore(
+            stored: UserDefaults.standard.array(forKey: DefaultsKey.displaysSwitchedOff) as? [Int])
+    }
+
     /// Recovers displays a previous run left off, using the identity saved
     /// before the connection disappeared. Called at startup on main, before
     /// display work. A display that cannot be switched back on yet keeps its
     /// power-on control and is tried again when the screens wake.
     func restoreDisplaysLeftOff() {
         let stored = UserDefaults.standard.array(forKey: DefaultsKey.displaysSwitchedOff) as? [Int] ?? []
-        guard !stored.isEmpty else { return }
+        guard BrightnessSupport.hasDisplaysToRestore(stored: stored) else { return }
         guard DisplayConfigurationBridge.configureEnabled != nil else { return }
         let fingerprints = UserDefaults.standard.dictionary(forKey: DefaultsKey.displaysSwitchedOffFingerprints)
             as? [String: String] ?? [:]
         for id in stored {
-            // The list is plain numbers on disk and can arrive edited or
-            // imported, so anything that is not a display number is skipped
-            // rather than converted.
-            guard let displayID = CGDirectDisplayID(exactly: id) else { continue }
+            guard let displayID = BrightnessSupport.restorableDisplayID(id) else { continue }
             let currentFingerprint = Self.restorationDisplayFingerprint(displayID)
             let display = BrightnessDisplay(
                 id: displayID,
@@ -2207,6 +2227,7 @@ final class BrightnessService: ObservableObject {
 
     private func rebuild(generation: Int, previousDisplays: [BrightnessDisplay],
                          screenNames: [CGDirectDisplayID: String]) {
+        confirmedZeroUnmutes = confirmedZeroUnmutes.filter { Self.speakerEndpointIsConnected($0.value.entryID) }
         var ids = [CGDirectDisplayID](repeating: 0, count: 16)
         var count: UInt32 = 0
         CGGetOnlineDisplayList(16, &ids, &count)
@@ -2315,8 +2336,7 @@ final class BrightnessService: ObservableObject {
         let canPublishDiscovery = discoveryIsCurrent && topologyChanged
         if discoveryIsCurrent {
             if topologyChanged {
-                audioLifetime &+= 1
-                audioRoutes.removeAll()
+                invalidateSpeakerRoutes()
                 recheckedWriteOnlyPaths = []
                 ddcRetryAttempts = [:]
                 serviceDiscoveryRetries = .init()
@@ -2588,8 +2608,8 @@ final class BrightnessService: ObservableObject {
                   let path = BrightnessSupport.ddcPathKey(displayFingerprint: fingerprint,
                                                           ioDisplayLocation: matched.identity.ioDisplayLocation) else { continue }
             let speakerKey = "audio:" + path
-            guard let probed = probeAudio(for: id, service: matched.service,
-                                            chip: matched.chipAddress, path: path) else {
+            guard let probed = probeAudio(for: id, service: matched.service, chip: matched.chipAddress,
+                                          path: path, registryEntryID: matched.registryEntryID) else {
                 let attempt = (ddcRetryAttempts[speakerKey] ?? 0) + 1
                 if let delay = BrightnessSupport.ddcRetryDelay(attempt: attempt, probesAudio: probesAudio,
                                                               repliedThisSession: ddcRepliedPaths.contains(speakerKey)) {
@@ -2602,8 +2622,9 @@ final class BrightnessService: ObservableObject {
             ddcRetryAttempts[speakerKey] = nil
             built[candidate.index].audio = probed.state
             newAudioRoutes[id] = AudioRoute(path: path, fingerprint: fingerprint, service: matched.service,
-                                           chipAddress: matched.chipAddress, hasNativeMute: probed.hasNativeMute,
-                                           unmutesLeavingZero: probed.unmutesLeavingZero)
+                                           registryEntryID: matched.registryEntryID, chipAddress: matched.chipAddress,
+                                           hasNativeMute: probed.hasNativeMute,
+                                           unmutesLeavingZero: probed.unmutesLeavingZero, muteVersion: probed.muteVersion)
         }
 
         // A DDC or system route owns the picture again. A gamma curve left
@@ -2651,7 +2672,6 @@ final class BrightnessService: ObservableObject {
             let connectedPaths = Set(newAudioRoutes.values.map(\.path))
             speakerLevelRevisions = speakerLevelRevisions.filter { connectedPaths.contains($0.key) }
             pendingSpeakerUnmutes = pendingSpeakerUnmutes.filter { connectedPaths.contains($0.key) }
-            speakerRestoreLevels = speakerRestoreLevels.filter { connectedPaths.contains($0.key) }
             scannedAudio = probesAudio
             audioScanQueued = nil
             recordDiscoveredTopology(online: seenTopology, active: activeTopology,
@@ -2881,24 +2901,26 @@ final class BrightnessService: ObservableObject {
         ddcCommandEnds[id] = DispatchTime.now().uptimeNanoseconds / 1_000
     }
 
-    private func ddcSend(to id: CGDirectDisplayID, service: CFTypeRef, chip: UInt32, packet: [UInt8],
+    private func ddcSend(to id: CGDirectDisplayID, service: CFTypeRef, chip: UInt32, packet: @autoclosure () -> [UInt8]?,
+                         acceptPartialWrite: Bool = false, once: Bool = false,
                          whileCurrent: () -> Bool = { true }) -> Bool {
         guard let write = BrightnessBridge.writeI2C else { return false }
         paceDDCCommand(for: id)
         defer { recordDDCCommandEnd(for: id) }
-        var bytes = packet
         var success = false
-        for attempt in 0...BrightnessSupport.retryAttempts {
-            for _ in 0..<BrightnessSupport.writeCycles {
+        let retries = once ? 0 : BrightnessSupport.retryAttempts
+        let cycles = once ? 1 : BrightnessSupport.writeCycles
+        for attempt in 0...retries {
+            for _ in 0..<cycles {
                 usleep(BrightnessSupport.writePauseMicroseconds)
-                guard whileCurrent() else { return false }
+                guard whileCurrent(), var bytes = packet() else { return acceptPartialWrite && success }
                 let accepted = write(service, chip,
                                      BrightnessSupport.dataAddress,
                                      &bytes, UInt32(bytes.count)) == KERN_SUCCESS
                 success = accepted || success
             }
             if success { return true }
-            if attempt < BrightnessSupport.retryAttempts {
+            if attempt < retries {
                 usleep(BrightnessSupport.retryPauseMicroseconds)
             }
         }
@@ -3038,14 +3060,15 @@ final class BrightnessService: ObservableObject {
                           for id: CGDirectDisplayID,
                           service: CFTypeRef,
                           chip: UInt32,
-                          classifyingChannel: Bool = false) -> DDCProbe {
+                          classifyingChannel: Bool = false,
+                          attempts: Int = BrightnessSupport.ddcProbeAttempts(),
+                          whileCurrent: () -> Bool = { true }) -> DDCProbe {
         guard let write = BrightnessBridge.writeI2C,
               let read = BrightnessBridge.readI2C else { return .dead }
         paceDDCCommand(for: id)
         defer { recordDDCCommandEnd(for: id) }
         var request = BrightnessSupport.readRequestPacket(code: code)
         var writeAccepted = false
-        let attempts = BrightnessSupport.ddcProbeAttempts()
         for attempt in 0..<attempts {
             let writeCycles = BrightnessSupport.ddcProbeWriteCycles(
                 classifyingChannel: classifyingChannel,
@@ -3053,6 +3076,7 @@ final class BrightnessService: ObservableObject {
             var requestAccepted = false
             for _ in 0..<writeCycles {
                 usleep(BrightnessSupport.writePauseMicroseconds)
+                guard whileCurrent() else { return .dead }
                 if write(service, chip,
                          BrightnessSupport.dataAddress,
                          &request, UInt32(request.count)) == KERN_SUCCESS {
@@ -3061,6 +3085,7 @@ final class BrightnessService: ObservableObject {
                 }
             }
             usleep(BrightnessSupport.readPauseMicroseconds)
+            guard whileCurrent() else { return .dead }
             var reply = [UInt8](repeating: 0, count: BrightnessSupport.replyLength)
             if requestAccepted, read(service, chip, 0,
                     &reply, UInt32(reply.count)) == KERN_SUCCESS,
@@ -3096,11 +3121,25 @@ final class BrightnessService: ObservableObject {
 
     func requestSpeakers(_ change: BrightnessSupport.SpeakerChange,
                          target: BrightnessSupport.SpeakerTarget, requiresKeys: Bool = false,
+                         sliderFeedback: SpeakerSliderFeedback.Request? = nil,
                          completion: @escaping (Bool) -> Void = { _ in }) {
         guard acceptsSpeakerTarget(target, requiresKeys: requiresKeys) else { completion(false); return }
+        switch change {
+        case .set(_, .some), .toggleMute:
+            guard stateLock.withLock({ audioRoutes[target.displayID]?.hasNativeMute == true }) else {
+                completion(false)
+                return
+            }
+        default: break
+        }
         // A newer absolute setting also cancels the unmute of an older write
         // that is already waiting for its readback.
         let revision: UInt64? = stateLock.withLock {
+            if let sliderFeedback, let previous = speakerSliderIntents[target.path],
+               sliderFeedback.previous === previous {
+                sliderFeedback.writes = previous.writes
+            }
+            speakerSliderIntents[target.path] = sliderFeedback
             switch change {
             case .set(.some, nil):
                 speakerLevelRevisions[target.path, default: 0] &+= 1
@@ -3119,7 +3158,7 @@ final class BrightnessService: ObservableObject {
             next = combined
         }
         pendingAudio.append(PendingAudio(target: target, change: next, requiresKeys: requiresKeys,
-                                         levelRevision: revision, completion: completion))
+                                         levelRevision: revision, sliderFeedback: sliderFeedback, completion: completion))
         superseded?.completion(false)
         drainPendingAudio()
     }
@@ -3133,11 +3172,36 @@ final class BrightnessService: ObservableObject {
         return target.deviceID == nil || monitorSpeakerOutput()?.target == target
     }
 
-    private func suspendSpeakerRoutes() {
-        stateLock.withLock {
-            audioLifetime &+= 1
-            audioRoutes.removeAll()
+    /// A confirmed drag can still be held when the monitor disconnects or another control moves it.
+    private func confirmSliderWrite(_ request: SpeakerSliderFeedback.Request, target: BrightnessSupport.SpeakerTarget,
+                                    requiresKeys: Bool, confirmation: SpeakerSliderFeedback.Confirmation) {
+        request.confirmed { [weak self] in
+            let id = target.displayID
+            guard let self, self.acceptsSpeakerTarget(target, requiresKeys: requiresKeys),
+                  let route = self.stateLock.withLock({
+                      self.speakerSliderIntents[target.path] === request ? self.audioRoutes[id] : nil
+                  }), route.path == target.path,
+                  confirmation.endpoint.matches(route.sliderEndpoint, confirmedOwnWrite: confirmation.wrote),
+                  Self.restorationDisplayFingerprint(id) == route.fingerprint,
+                  CGDisplayIsActive(id) != 0, CGDisplayIsAsleep(id) == 0 else { return }
+            if let entryID = route.sliderEndpoint.registryEntryID ?? confirmation.endpoint.registryEntryID,
+               !Self.speakerEndpointIsConnected(entryID) { return }
+            PreciseVolumeRollerService.playVolumeFeedback()
         }
+    }
+
+    /// Called under stateLock. Only turning the controls off can leave an
+    /// accepted unmute to verify. A physical invalidation or an explicit stop revokes it.
+    private func invalidateSpeakerRoutes(disablingControls: Bool = false) {
+        if disablingControls && audioRoutes.isEmpty { return }
+        disabledSpeakerLifetime = disablingControls ? audioLifetime : nil
+        audioLifetime &+= 1
+        audioRoutes.removeAll()
+        speakerSliderIntents.removeAll()
+    }
+
+    private func suspendSpeakerRoutes() {
+        stateLock.withLock { invalidateSpeakerRoutes() }
         cancelPendingAudio()
         AppVolumeMixer.shared.refreshMonitorOutput()
     }
@@ -3158,8 +3222,12 @@ final class BrightnessService: ObservableObject {
                 let current = self.isCurrentSpeakerChange(pending)
                     && self.acceptsSpeakerTarget(pending.target, requiresKeys: pending.requiresKeys)
                 if current, let index = self.displays.firstIndex(where: { $0.id == pending.target.displayID }) {
-                    if self.displays[index].audio != result { self.displays[index].audio = result }
+                    if self.displays[index].audio != result?.audio { self.displays[index].audio = result?.audio }
                     if result == nil { self.refresh(force: true) }
+                }
+                if current, let confirmation = result?.sliderConfirmation, let feedback = pending.sliderFeedback {
+                    self.confirmSliderWrite(feedback, target: pending.target, requiresKeys: pending.requiresKeys,
+                                            confirmation: confirmation)
                 }
                 pending.completion(current && result != nil)
                 self.audioWriteInFlight = false
@@ -3168,27 +3236,48 @@ final class BrightnessService: ObservableObject {
         }
     }
 
-    private func isCurrentSpeakerChange(_ pending: PendingAudio, checkingLevel: Bool = true) -> Bool {
+    private func isCurrentSpeakerChange(_ pending: PendingAudio) -> Bool {
         let target = pending.target
         return stateLock.withLock {
             audioLifetime == target.connectionGeneration && audioRoutes[target.displayID]?.path == target.path
                 && (target.deviceID == nil || target.outputGeneration == audioOutputGeneration)
-                && (!checkingLevel || pending.levelRevision == nil || pending.levelRevision == speakerLevelRevisions[target.path, default: 0])
+                && (pending.levelRevision == nil || pending.levelRevision == speakerLevelRevisions[target.path, default: 0])
         }
     }
 
     /// Capture the physical service for the whole transaction. A route
     /// change while the paced read/write is waiting must not transfer it.
-    private func writeSpeakers(_ pending: PendingAudio) -> BrightnessDisplay.Audio? {
+    private func writeSpeakers(_ pending: PendingAudio)
+        -> (audio: BrightnessDisplay.Audio, sliderConfirmation: SpeakerSliderFeedback.Confirmation?)? {
         let target = pending.target
         let id = target.displayID
         guard let route = stateLock.withLock({ audioRoutes[id] }), route.path == target.path else { return nil }
-        func current(checkingLevel: Bool = true) -> Bool {
+        let sliderWrites = pending.sliderFeedback?.writes
+        var wrote = false
+        var volumeMaximum: UInt16 = 0
+        var sentUnmute = false
+        let knownZeroUnmute = confirmsZeroUnmute(path: target.path, registryEntryID: route.registryEntryID,
+                                                 chip: route.chipAddress)
+        func canVerifyUnmute() -> Bool { Self.speakerEndpointIsConnected(route.registryEntryID) }
+        func originalMonitorIsConnected() -> Bool {
+            let identifiedScalar = BrightnessSupport.usesScalarMute(mccsVersion: route.muteVersion)
+                && (route.registryEntryID ?? 0) != 0
+            if (sentUnmute || knownZeroUnmute || identifiedScalar) && !canVerifyUnmute() { return false }
+            let connected = stateLock.withLock {
+                guard let live = audioRoutes[id] else {
+                    return sentUnmute && disabledSpeakerLifetime == target.connectionGeneration
+                }
+                return audioLifetime == target.connectionGeneration && live.path == route.path
+                    && live.fingerprint == route.fingerprint && live.service === route.service
+                    && live.registryEntryID == route.registryEntryID && live.chipAddress == route.chipAddress
+            }
+            return connected && Self.restorationDisplayFingerprint(id) == route.fingerprint
+                && CGDisplayIsActive(id) != 0 && CGDisplayIsAsleep(id) == 0
+        }
+        func current() -> Bool {
             guard wantsMonitorVolume,
                   !pending.requiresKeys || UserDefaults.standard.bool(forKey: DefaultsKey.displayVolumeKeysEnabled),
-                  isCurrentSpeakerChange(pending, checkingLevel: checkingLevel),
-                  Self.restorationDisplayFingerprint(id) == route.fingerprint,
-                  CGDisplayIsActive(id) != 0, CGDisplayIsAsleep(id) == 0 else { return false }
+                  isCurrentSpeakerChange(pending), originalMonitorIsConnected() else { return false }
             guard let device = target.deviceID else { return true }
             guard let output = Self.defaultOutputDevice(), output.id == device,
                   BrightnessSupport.isDisplayAudioTransport(output.transport),
@@ -3198,39 +3287,77 @@ final class BrightnessService: ObservableObject {
             }
         }
         guard current() else { return nil }
-        var restore = speakerRestoreLevels[target.path]
+        sliderWrites?.begin(on: route.sliderEndpoint)
         var needsUnmute = pendingSpeakerUnmutes[target.path] == target.connectionGeneration
+        var confirmedZeroUnmute = knownZeroUnmute
         let keySettings = pending.requiresKeys ? monitorVolumeKeySettings : MonitorVolumeKeySettings()
-        var sentUnmute = false
+        func unmuteCeiling(_ maximum: UInt16) -> UInt16 {
+            let original = keySettings.ceiling(for: maximum)
+            guard pending.requiresKeys else { return original }
+            return min(original, monitorVolumeKeySettings.ceiling(for: maximum))
+        }
         let result = BrightnessSupport.applySpeakerChange(pending.change, hasNativeMute: route.hasNativeMute,
-            unmutesLeavingZero: route.unmutesLeavingZero, keySettings: keySettings, restore: &restore,
-            needsUnmute: &needsUnmute, read: { code in
-                guard current(), !sentUnmute || !pending.requiresKeys || self.monitorVolumeKeySettings == keySettings,
-                      case let .replied(value, maximum) = self.ddcProbe(code, for: id, service: route.service,
-                                                                       chip: route.chipAddress)
-                else { return nil }
+            unmutesLeavingZero: route.unmutesLeavingZero, muteVersion: route.muteVersion,
+            keySettings: keySettings, unmuteCeiling: unmuteCeiling,
+            canVerifyUnmute: canVerifyUnmute, needsUnmute: &needsUnmute,
+            confirmedZeroUnmute: &confirmedZeroUnmute, read: { code in
+                guard sentUnmute || current() else { return nil }
+                let reply = self.ddcProbe(code, for: id, service: route.service, chip: route.chipAddress,
+                                          whileCurrent: originalMonitorIsConnected)
+                guard case let .replied(value, maximum) = reply else { return nil }
+                if code == BrightnessSupport.audioVolumeCode { volumeMaximum = maximum }
                 return (value, maximum)
             }, write: { code, value in
-                let packet = BrightnessSupport.writePacket(code: code, value: value)
+                let unmutes = code == BrightnessSupport.audioMuteCode && value == BrightnessSupport.audioUnmutedValue
+                let mutes = code == BrightnessSupport.audioMuteCode && value == BrightnessSupport.audioMutedValue
+                let recoversVolume = sentUnmute && code == BrightnessSupport.audioVolumeCode
+                var sentValue = value
+                func packetAtSend() -> [UInt8]? {
+                    // DDC pacing and endpoint validation can outlast a change to the key ceiling.
+                    if recoversVolume {
+                        sentValue = min(value, unmuteCeiling(volumeMaximum))
+                        guard sentValue > 0 else { return nil }
+                    }
+                    return BrightnessSupport.writePacket(code: code, value: sentValue)
+                }
                 let accepted = self.ddcSend(to: id, service: route.service, chip: route.chipAddress,
-                                            packet: packet) {
-                    // Settings can change while the bus is pacing a write. A
-                    // protective re-mute still belongs to the original target.
-                    let mutes = code == BrightnessSupport.audioMuteCode && value == BrightnessSupport.audioMutedValue
-                    return current(checkingLevel: !(sentUnmute && mutes))
-                        && (!pending.requiresKeys || mutes || self.monitorVolumeKeySettings == keySettings)
+                                            packet: packetAtSend(), acceptPartialWrite: unmutes || sliderWrites != nil,
+                                            once: recoversVolume) {
+                    // Once the monitor has accepted unmute, finish protecting that
+                    // connection even if the keys now belong to another output.
+                    if sentUnmute && (mutes || recoversVolume) {
+                        return originalMonitorIsConnected()
+                    }
+                    if unmutes && !canVerifyUnmute() { return false }
+                    return current() && (!pending.requiresKeys || mutes || self.monitorVolumeKeySettings == keySettings)
                 }
-                if accepted, code == BrightnessSupport.audioMuteCode, value == BrightnessSupport.audioUnmutedValue {
-                    sentUnmute = true
+                guard accepted else { return nil }
+                wrote = true
+                if code == BrightnessSupport.audioVolumeCode {
+                    sliderWrites?.volume = BrightnessSupport.SpeakerLevel((sentValue, volumeMaximum))
+                } else if code == BrightnessSupport.audioMuteCode {
+                    sliderWrites?.muted = mutes
                 }
-                return accepted
+                if unmutes { sentUnmute = true }
+                return sentValue
             })
         pendingSpeakerUnmutes[target.path] = needsUnmute ? target.connectionGeneration : nil
-        speakerRestoreLevels[target.path] = restore
-        guard let result else { return nil }
+        if !knownZeroUnmute, confirmedZeroUnmute, let entryID = route.registryEntryID, entryID != 0 {
+            confirmedZeroUnmutes[target.path] = (entryID, route.chipAddress)
+        }
+        // Only a newer slider request can finish confirming an interrupted write.
+        // A failed transaction or its safety mute cannot authorize a later click.
+        if let sliderWrites, result == nil, sentUnmute || isCurrentSpeakerChange(pending) {
+            sliderWrites.volume = nil
+            sliderWrites.muted = nil
+        }
+        guard let result, current() else { return nil }
         let panel = BrightnessSupport.SpeakerTarget(displayID: id, path: target.path,
                                                    connectionGeneration: target.connectionGeneration)
-        return BrightnessDisplay.Audio(target: panel, volume: result.level.volume, muted: result.muted)
+        let confirmed = sliderWrites?.volume == result.level
+            || (sliderWrites?.muted != nil && sliderWrites?.muted == result.muted)
+        return (BrightnessDisplay.Audio(target: panel, volume: result.level.volume, muted: result.muted),
+                confirmed ? (route.sliderEndpoint, wrote) : nil)
     }
 
     func rescanForUnclaimedVolumeKey() {
@@ -3354,8 +3481,16 @@ final class BrightnessService: ObservableObject {
 
     // MARK: - Speaker probing (work queue)
 
-    private func probeAudio(for id: CGDirectDisplayID, service: CFTypeRef, chip: UInt32, path: String)
-        -> (hasNativeMute: Bool, unmutesLeavingZero: Bool, state: BrightnessDisplay.Audio)? {
+    private func confirmsZeroUnmute(path: String, registryEntryID: UInt64?, chip: UInt32) -> Bool {
+        guard let known = confirmedZeroUnmutes[path] else { return false }
+        return known.entryID == registryEntryID && known.chip == chip
+    }
+
+    private func probeAudio(for id: CGDirectDisplayID, service: CFTypeRef, chip: UInt32, path: String,
+                            registryEntryID: UInt64? = nil)
+        -> (hasNativeMute: Bool, unmutesLeavingZero: Bool, muteVersion: UInt16?, state: BrightnessDisplay.Audio)? {
+        let knownZeroUnmute = confirmsZeroUnmute(path: path, registryEntryID: registryEntryID, chip: chip)
+        if !knownZeroUnmute { confirmedZeroUnmutes[path] = nil }
         guard wantsMonitorVolume, BrightnessSupport.shouldProbe(
             pathKey: path, rememberedPaths: rememberedPaths(DefaultsKey.displayAudioSilentPaths)),
               case let .replied(current, maximum) = ddcProbe(BrightnessSupport.audioVolumeCode,
@@ -3368,17 +3503,37 @@ final class BrightnessService: ObservableObject {
         }
         var nativeMute: Bool?
         var unmutesLeavingZero = false
+        var muteVersion: UInt16? = stateLock.withLock {
+            guard let prior = audioRoutes[id], prior.path == path, prior.chipAddress == chip,
+                  prior.registryEntryID == registryEntryID,
+                  (registryEntryID ?? 0) != 0 || prior.service === service else { return nil }
+            return prior.muteVersion
+        }
+        func versionEndpointIsCurrent() -> Bool {
+            wantsMonitorVolume && ((registryEntryID ?? 0) == 0 || Self.speakerEndpointIsConnected(registryEntryID))
+        }
         if case let .replied(value, range) = ddcProbe(BrightnessSupport.audioMuteCode, for: id, service: service, chip: chip) {
-            nativeMute = BrightnessSupport.muteReply(current: value, maximum: range)
-            unmutesLeavingZero = BrightnessSupport.unmutesLeavingZero(muteReply: value, maximum: range)
+            // Ask the version only when the two interpretations disagree. A
+            // failed optional read leaves ordinary volume available.
+            let ambiguous = BrightnessSupport.muteReply(current: value, maximum: range) == nil
+                && (value == BrightnessSupport.audioMutedValue || value == BrightnessSupport.audioUnmutedValue)
+            if ambiguous, muteVersion == nil,
+               case let .replied(version, _) = ddcProbe(BrightnessSupport.mccsVersionCode, for: id, service: service,
+                                                       chip: chip, attempts: 1, whileCurrent: versionEndpointIsCurrent) {
+                muteVersion = version
+            }
+            if (ambiguous || muteVersion != nil) && !versionEndpointIsCurrent() { return nil }
+            nativeMute = BrightnessSupport.muteReply(current: value, maximum: range, mccsVersion: muteVersion)
+            unmutesLeavingZero = BrightnessSupport.unmutesLeavingZero(muteReply: value, maximum: range, mccsVersion: muteVersion)
+            if unmutesLeavingZero && knownZeroUnmute && Self.speakerEndpointIsConnected(registryEntryID) {
+                nativeMute = false
+            }
         }
         guard wantsMonitorVolume else { return nil }
-        if level.raw > 0 { speakerRestoreLevels[path] = nil }
-        let muted = nativeMute ?? level.mutedWithoutNativeControl(restoring: speakerRestoreLevels[path])
         let target = BrightnessSupport.SpeakerTarget(displayID: id, path: path,
                                                      connectionGeneration: stateLock.withLock { audioLifetime })
-        return (nativeMute != nil, unmutesLeavingZero,
-                BrightnessDisplay.Audio(target: target, volume: level.volume, muted: muted))
+        return (nativeMute != nil, unmutesLeavingZero, muteVersion,
+                BrightnessDisplay.Audio(target: target, volume: level.volume, muted: nativeMute))
     }
 
     // MARK: - Display identity
@@ -3421,7 +3576,16 @@ final class BrightnessService: ObservableObject {
     private struct ExternalService {
         var identity: BrightnessSupport.ServiceIdentity
         var service: CFTypeRef
+        var registryEntryID: UInt64?
         var chipAddress: UInt32
+    }
+
+    private static func speakerEndpointIsConnected(_ entryID: UInt64?) -> Bool {
+        guard let entryID, entryID != 0, let matching = IORegistryEntryIDMatching(entryID) else { return false }
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, matching)
+        guard service != IO_OBJECT_NULL else { return false }
+        IOObjectRelease(service)
+        return true
     }
 
     /// External displays hang off the IORegistry as a framebuffer entry
@@ -3470,8 +3634,10 @@ final class BrightnessService: ObservableObject {
                       location == "External",
                       let service = createWithService(kCFAllocatorDefault, entry)?.takeRetainedValue()
                 else { continue }
+                var entryID: UInt64 = 0
+                let hasID = IORegistryEntryGetRegistryEntryID(entry, &entryID) == KERN_SUCCESS
                 results.append(ExternalService(
-                    identity: pending, service: service,
+                    identity: pending, service: service, registryEntryID: hasID ? entryID : nil,
                     chipAddress: BrightnessSupport.ddcChipAddress(
                         epicProviderClass: Self.ancestorProperty(entry, "EPICProviderClass") as? String)))
             }
@@ -3550,7 +3716,7 @@ enum BrightnessBridge {
 /// its methods at runtime so unsupported hardware or a future removal simply
 /// hides the control instead of affecting launch.
 private final class KeyboardLightBridge {
-    private typealias CopyIDsFn = @convention(c) (NSObject, Selector) -> Unmanaged<AnyObject>
+    private typealias CopyIDsFn = @convention(c) (NSObject, Selector) -> Unmanaged<AnyObject>?
     private typealias IsBuiltInFn = @convention(c) (NSObject, Selector, UInt64) -> ObjCBool
     private typealias GetBrightnessFn = @convention(c) (NSObject, Selector, UInt64) -> Float
     private typealias SetBrightnessFn = @convention(c)
@@ -3588,7 +3754,7 @@ private final class KeyboardLightBridge {
                 client, selector: setSelector, as: SetBrightnessFn.self),
               let suspendIdleDimming: SuspendIdleDimmingFn = Self.implementation(
                 client, selector: suspendSelector, as: SuspendIdleDimmingFn.self),
-              let ids = copyIDs(client, copySelector).takeRetainedValue() as? [NSNumber],
+              let ids = copyIDs(client, copySelector)?.takeRetainedValue() as? [NSNumber],
               let keyboardID = ids.map(\.uint64Value).first(where: {
                   isBuiltIn(client, builtInSelector, $0).boolValue
               })
