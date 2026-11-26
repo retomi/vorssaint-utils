@@ -24,13 +24,7 @@ struct BrightnessDisplay: Identifiable, Equatable {
     /// The speakers built into a monitor, once its channel has answered the
     /// audio controls. Nil for the built-in panel and for every monitor with
     /// no speakers of its own, which is most of them.
-    struct Audio: Equatable {
-        let target: BrightnessSupport.SpeakerTarget
-        /// 0...1 for the UI slider.
-        var volume: Double
-        /// Nil when the monitor has no confirmed native mute control.
-        var muted: Bool?
-    }
+    typealias Audio = BrightnessSupport.MonitorSpeakerOutput
 
     let id: CGDirectDisplayID
     let name: String
@@ -277,10 +271,10 @@ final class BrightnessService: ObservableObject {
     private var ddcRetry: DispatchWorkItem?
     /// Uptime of the last rescan a volume key started. Main thread only.
     private var lastVolumeKeyRescan: TimeInterval?
-    /// The tap is on the main run loop. All HAL reads run off that loop.
+    /// The key tap uses the observer's snapshot. Its HAL checks run off the main loop.
     private let audioOutputQueue = DispatchQueue(label: "com.vorssaint.utils.display-audio")
     private var audioOutputGeneration = 0
-    private var selectedAudioOutput: (id: AudioObjectID, name: String)?
+    private var selectedAudioOutput: (id: AudioObjectID, monitorName: String?, uid: String?)?
     private var audioOutputListener: AudioObjectPropertyListenerBlock?
     private var writeSequence: UInt64 = 0
     /// Keeps fast system-key repeats based on the newest requested value while
@@ -3126,7 +3120,7 @@ final class BrightnessService: ObservableObject {
         guard acceptsSpeakerTarget(target, requiresKeys: requiresKeys) else { completion(false); return }
         switch change {
         case .set(_, .some), .toggleMute:
-            guard stateLock.withLock({ audioRoutes[target.displayID]?.hasNativeMute == true }) else {
+            guard displays.first(where: { $0.id == target.displayID })?.audio?.canToggleMute == true else {
                 completion(false)
                 return
             }
@@ -3176,17 +3170,20 @@ final class BrightnessService: ObservableObject {
     private func confirmSliderWrite(_ request: SpeakerSliderFeedback.Request, target: BrightnessSupport.SpeakerTarget,
                                     requiresKeys: Bool, confirmation: SpeakerSliderFeedback.Confirmation) {
         request.confirmed { [weak self] in
-            let id = target.displayID
-            guard let self, self.acceptsSpeakerTarget(target, requiresKeys: requiresKeys),
-                  let route = self.stateLock.withLock({
-                      self.speakerSliderIntents[target.path] === request ? self.audioRoutes[id] : nil
-                  }), route.path == target.path,
-                  confirmation.endpoint.matches(route.sliderEndpoint, confirmedOwnWrite: confirmation.wrote),
-                  Self.restorationDisplayFingerprint(id) == route.fingerprint,
-                  CGDisplayIsActive(id) != 0, CGDisplayIsAsleep(id) == 0 else { return }
-            if let entryID = route.sliderEndpoint.registryEntryID ?? confirmation.endpoint.registryEntryID,
-               !Self.speakerEndpointIsConnected(entryID) { return }
-            PreciseVolumeRollerService.playVolumeFeedback()
+            guard let self, let output = request.output, PreciseVolumeRollerService.volumeFeedbackEnabled else { return }
+            self.confirmOutputUID(output.uid, for: output.id, requiresDefault: false) { uid in
+                let id = target.displayID
+                guard let uid, request.isCurrent, self.acceptsSpeakerTarget(target, requiresKeys: requiresKeys),
+                      let route = self.stateLock.withLock({
+                          self.speakerSliderIntents[target.path] === request ? self.audioRoutes[id] : nil
+                      }), route.path == target.path,
+                      confirmation.endpoint.matches(route.sliderEndpoint, confirmedOwnWrite: confirmation.wrote),
+                      Self.restorationDisplayFingerprint(id) == route.fingerprint,
+                      CGDisplayIsActive(id) != 0, CGDisplayIsAsleep(id) == 0 else { return }
+                if let entryID = route.sliderEndpoint.registryEntryID ?? confirmation.endpoint.registryEntryID,
+                   !Self.speakerEndpointIsConnected(entryID) { return }
+                PreciseVolumeRollerService.playVolumeFeedback(on: uid)
+            }
         }
     }
 
@@ -3229,7 +3226,7 @@ final class BrightnessService: ObservableObject {
                     self.confirmSliderWrite(feedback, target: pending.target, requiresKeys: pending.requiresKeys,
                                             confirmation: confirmation)
                 }
-                pending.completion(current && result != nil)
+                pending.completion(current && result?.accepted == true)
                 self.audioWriteInFlight = false
                 self.drainPendingAudio()
             }
@@ -3248,7 +3245,7 @@ final class BrightnessService: ObservableObject {
     /// Capture the physical service for the whole transaction. A route
     /// change while the paced read/write is waiting must not transfer it.
     private func writeSpeakers(_ pending: PendingAudio)
-        -> (audio: BrightnessDisplay.Audio, sliderConfirmation: SpeakerSliderFeedback.Confirmation?)? {
+        -> (audio: BrightnessDisplay.Audio, accepted: Bool, sliderConfirmation: SpeakerSliderFeedback.Confirmation?)? {
         let target = pending.target
         let id = target.displayID
         guard let route = stateLock.withLock({ audioRoutes[id] }), route.path == target.path else { return nil }
@@ -3258,11 +3255,11 @@ final class BrightnessService: ObservableObject {
         var sentUnmute = false
         let knownZeroUnmute = confirmsZeroUnmute(path: target.path, registryEntryID: route.registryEntryID,
                                                  chip: route.chipAddress)
-        func canVerifyUnmute() -> Bool { Self.speakerEndpointIsConnected(route.registryEntryID) }
+        func endpointIsConnected() -> Bool { Self.speakerEndpointIsConnected(route.registryEntryID) }
         func originalMonitorIsConnected() -> Bool {
             let identifiedScalar = BrightnessSupport.usesScalarMute(mccsVersion: route.muteVersion)
                 && (route.registryEntryID ?? 0) != 0
-            if (sentUnmute || knownZeroUnmute || identifiedScalar) && !canVerifyUnmute() { return false }
+            if (sentUnmute || knownZeroUnmute || identifiedScalar) && !endpointIsConnected() { return false }
             let connected = stateLock.withLock {
                 guard let live = audioRoutes[id] else {
                     return sentUnmute && disabledSpeakerLifetime == target.connectionGeneration
@@ -3280,10 +3277,9 @@ final class BrightnessService: ObservableObject {
                   isCurrentSpeakerChange(pending), originalMonitorIsConnected() else { return false }
             guard let device = target.deviceID else { return true }
             guard let output = Self.defaultOutputDevice(), output.id == device,
-                  BrightnessSupport.isDisplayAudioTransport(output.transport),
-                  !AppVolumeMixer.hasSettableOutputVolume(for: device) else { return false }
+                  let name = output.monitorName else { return false }
             return stateLock.withLock {
-                BrightnessSupport.displayForAudioOutput(deviceName: output.name, candidates: audioDisplayNames) == id
+                BrightnessSupport.displayForAudioOutput(deviceName: name, candidates: audioDisplayNames) == id
             }
         }
         guard current() else { return nil }
@@ -3298,8 +3294,9 @@ final class BrightnessService: ObservableObject {
         }
         let result = BrightnessSupport.applySpeakerChange(pending.change, hasNativeMute: route.hasNativeMute,
             unmutesLeavingZero: route.unmutesLeavingZero, muteVersion: route.muteVersion,
+            hasEndpointID: (route.registryEntryID ?? 0) != 0,
             keySettings: keySettings, unmuteCeiling: unmuteCeiling,
-            canVerifyUnmute: canVerifyUnmute, needsUnmute: &needsUnmute,
+            canVerifyUnmute: endpointIsConnected, needsUnmute: &needsUnmute,
             confirmedZeroUnmute: &confirmedZeroUnmute, read: { code in
                 guard sentUnmute || current() else { return nil }
                 let reply = self.ddcProbe(code, for: id, service: route.service, chip: route.chipAddress,
@@ -3310,6 +3307,8 @@ final class BrightnessService: ObservableObject {
             }, write: { code, value in
                 let unmutes = code == BrightnessSupport.audioMuteCode && value == BrightnessSupport.audioUnmutedValue
                 let mutes = code == BrightnessSupport.audioMuteCode && value == BrightnessSupport.audioMutedValue
+                let canLatchAtZero = code == BrightnessSupport.audioVolumeCode && value == 0
+                    && (route.hasNativeMute || route.unmutesLeavingZero)
                 let recoversVolume = sentUnmute && code == BrightnessSupport.audioVolumeCode
                 var sentValue = value
                 func packetAtSend() -> [UInt8]? {
@@ -3328,7 +3327,9 @@ final class BrightnessService: ObservableObject {
                     if sentUnmute && (mutes || recoversVolume) {
                         return originalMonitorIsConnected()
                     }
-                    if unmutes && !canVerifyUnmute() { return false }
+                    // Both directions need a verifiable endpoint. A zero volume
+                    // write can also latch mute until a separate unmute command.
+                    if (mutes || unmutes || canLatchAtZero) && !endpointIsConnected() { return false }
                     return current() && (!pending.requiresKeys || mutes || self.monitorVolumeKeySettings == keySettings)
                 }
                 guard accepted else { return nil }
@@ -3347,7 +3348,7 @@ final class BrightnessService: ObservableObject {
         }
         // Only a newer slider request can finish confirming an interrupted write.
         // A failed transaction or its safety mute cannot authorize a later click.
-        if let sliderWrites, result == nil, sentUnmute || isCurrentSpeakerChange(pending) {
+        if let sliderWrites, result?.accepted != true, sentUnmute || isCurrentSpeakerChange(pending) {
             sliderWrites.volume = nil
             sliderWrites.muted = nil
         }
@@ -3356,7 +3357,8 @@ final class BrightnessService: ObservableObject {
                                                    connectionGeneration: target.connectionGeneration)
         let confirmed = sliderWrites?.volume == result.level
             || (sliderWrites?.muted != nil && sliderWrites?.muted == result.muted)
-        return (BrightnessDisplay.Audio(target: panel, volume: result.level.volume, muted: result.muted),
+        return (BrightnessDisplay.Audio(target: panel, volume: result.level.volume, muted: result.muted,
+                                        canToggleMute: result.muted != nil && endpointIsConnected()), result.accepted,
                 confirmed ? (route.sliderEndpoint, wrote) : nil)
     }
 
@@ -3364,24 +3366,31 @@ final class BrightnessService: ObservableObject {
         guard wantsMonitorVolumeKeys, !displayPowerIsSuspended else { return }
         let now = ProcessInfo.processInfo.systemUptime
         guard BrightnessSupport.rescansForVolumeKey(
-            hasTarget: monitorSpeakerOutput() != nil, displayOwnsOutput: selectedAudioOutput != nil,
+            hasTarget: monitorSpeakerOutput() != nil, displayOwnsOutput: selectedAudioOutput?.monitorName != nil,
             now: now, lastRescan: lastVolumeKeyRescan) else { return }
         lastVolumeKeyRescan = now
         workQueue.async { [weak self] in self?.recheckedWriteOnlyPaths = [] }
         refresh(force: true)
     }
 
-    /// Main-thread snapshot. HAL only runs on an output change or during
-    /// final validation on the DDC queue, never during a slider update.
+    /// Sample once at the start of a panel edit. The default can change before
+    /// its notification arrives or before a queued read gets to run.
+    var sliderFeedbackOutput: SpeakerSliderFeedback.Output? {
+        guard let device = AppVolumeMixer.defaultOutputDeviceID(),
+              let uid = AppVolumeMixer.outputDeviceUID(for: device), !uid.isEmpty else { return nil }
+        return (device, uid)
+    }
+
+    /// Main-thread snapshot used to route volume keys without querying HAL.
     func monitorSpeakerOutput() -> BrightnessSupport.MonitorSpeakerOutput? {
-        guard running, !displayPowerIsSuspended, wantsMonitorVolume, let output = selectedAudioOutput else { return nil }
+        guard running, !displayPowerIsSuspended, wantsMonitorVolume,
+              let output = selectedAudioOutput, let name = output.monitorName else { return nil }
         guard let id = stateLock.withLock({ BrightnessSupport.displayForAudioOutput(
-            deviceName: output.name, candidates: audioDisplayNames) }),
-              let audio = displays.first(where: { $0.id == id && $0.isActive })?.audio else { return nil }
-        var target = audio.target
-        target.deviceID = output.id
-        target.outputGeneration = audioOutputGeneration
-        return BrightnessSupport.MonitorSpeakerOutput(target: target, volume: audio.volume, muted: audio.muted)
+            deviceName: name, candidates: audioDisplayNames) }),
+              var audio = displays.first(where: { $0.id == id && $0.isActive })?.audio else { return nil }
+        audio.target.deviceID = output.id
+        audio.target.outputGeneration = audioOutputGeneration
+        return audio
     }
 
     /// The fields of a display that decide where the volume keys go and what
@@ -3441,10 +3450,8 @@ final class BrightnessService: ObservableObject {
         invalidateSelectedAudioOutput()
         let generation = audioOutputGeneration
         audioOutputQueue.async {
-            let selected = Self.defaultOutputDevice().flatMap { output -> (id: AudioObjectID, name: String)? in
-                guard BrightnessSupport.isDisplayAudioTransport(output.transport),
-                      !AppVolumeMixer.hasSettableOutputVolume(for: output.id) else { return nil }
-                return (output.id, output.name)
+            let selected = Self.defaultOutputDevice().map { output in
+                (id: output.id, monitorName: output.monitorName, uid: AppVolumeMixer.outputDeviceUID(for: output.id))
             }
             DispatchQueue.main.async {
                 guard self.audioOutputListener != nil, self.audioOutputGeneration == generation else { return }
@@ -3454,11 +3461,28 @@ final class BrightnessService: ObservableObject {
         }
     }
 
-    /// The device the Mac plays through, with its name and how it is wired.
-    /// A device with no readable name cannot identify a monitor.
-    private static func defaultOutputDevice() -> (id: AudioObjectID,
-                                                  name: String,
-                                                  transport: UInt32)? {
+    /// A key release can precede the default-output notification on the main queue.
+    func confirmDefaultOutputUID(for device: AudioObjectID, completion: @escaping (String?) -> Void) {
+        guard let selected = selectedAudioOutput, selected.monitorName != nil, selected.id == device,
+              let expectedUID = selected.uid, !expectedUID.isEmpty else { completion(nil); return }
+        confirmOutputUID(expectedUID, for: device, requiresDefault: true, completion: completion)
+    }
+
+    /// Keys follow the default. A panel drag keeps its original playback device while it is available.
+    private func confirmOutputUID(_ expectedUID: String, for device: AudioObjectID, requiresDefault: Bool,
+                                  completion: @escaping (String?) -> Void) {
+        audioOutputQueue.async {
+            let uid = AppVolumeMixer.outputDeviceUID(for: device)
+            let available = requiresDefault ? AppVolumeMixer.defaultOutputDeviceID() == device
+                                            : AppVolumeMixer.isOutputDeviceAlive(device)
+            let confirmedUID = available && uid == expectedUID ? uid : nil
+            DispatchQueue.main.async { completion(confirmedUID) }
+        }
+    }
+
+    /// Only a display output controlled through DDC needs a name. An empty
+    /// name keeps it eligible for a rescan without identifying a monitor.
+    private static func defaultOutputDevice() -> (id: AudioObjectID, monitorName: String?)? {
         guard let deviceID = AppVolumeMixer.defaultOutputDeviceID() else { return nil }
         var transport: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
@@ -3466,8 +3490,10 @@ final class BrightnessService: ObservableObject {
             mSelector: kAudioDevicePropertyTransportType,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain)
-        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &transport) == noErr else {
-            return nil
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &transport) == noErr,
+              BrightnessSupport.isDisplayAudioTransport(transport),
+              !AppVolumeMixer.hasSettableOutputVolume(for: deviceID) else {
+            return (deviceID, nil)
         }
         // CoreAudio hands the name over already retained, so it is taken as
         // such rather than read into a bridged CFString and leaked.
@@ -3475,8 +3501,8 @@ final class BrightnessService: ObservableObject {
         size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         address.mSelector = kAudioObjectPropertyName
         guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &name) == noErr,
-              let name else { return (deviceID, "", transport) }
-        return (deviceID, name.takeRetainedValue() as String, transport)
+              let name else { return (deviceID, "") }
+        return (deviceID, name.takeRetainedValue() as String)
     }
 
     // MARK: - Speaker probing (work queue)
@@ -3532,8 +3558,9 @@ final class BrightnessService: ObservableObject {
         guard wantsMonitorVolume else { return nil }
         let target = BrightnessSupport.SpeakerTarget(displayID: id, path: path,
                                                      connectionGeneration: stateLock.withLock { audioLifetime })
+        let canToggleMute = nativeMute != nil && Self.speakerEndpointIsConnected(registryEntryID)
         return (nativeMute != nil, unmutesLeavingZero, muteVersion,
-                BrightnessDisplay.Audio(target: target, volume: level.volume, muted: nativeMute))
+                BrightnessDisplay.Audio(target: target, volume: level.volume, muted: nativeMute, canToggleMute: canToggleMute))
     }
 
     // MARK: - Display identity
